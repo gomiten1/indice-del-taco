@@ -4,7 +4,7 @@ EQUIPO 2 · PROPUESTA DE SERVICIOS
 
 Declaración de trabajo 
 
-| Consultora |  |
+| Consultora | Data Solutions  |
 | :---- | :---- |
 | **Cliente** | La TaquerIA Opus · Representante: Doña Ofelia Ruvalcaba |
 | **Respuesta al RFP del** | 06/10/2026 · Propuesta elaborada: 12/10/2026 |
