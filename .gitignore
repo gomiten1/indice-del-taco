@@ -1,0 +1,6 @@
+# Secretos
+.env
+
+# Datos pesados
+data/*
+
