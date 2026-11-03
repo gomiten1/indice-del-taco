@@ -1,0 +1,41 @@
+{
+  "formatVersion": 1,
+  "title": "Índice del Taco (avance)",
+  "direction": "LR",
+  "routing": "elbow",
+  "meta": {"author":"Data Solutions","version":"0.2"},
+  "groups": [
+    { "id": "aws", "label": "AWS", "color": "peach" }
+  ],
+  "nodes": [
+    { "id": "eb", "label": "EventBridge", "type": "events", "icon": "aws/eventbridge", "sub": "Una vez por semana", "group": "aws", "x": 24, "y": 96 },
+    { "id": "sns", "label": "SNS", "type": "events", "icon": "aws/sns", "sub": "Alerta por correo si falla", "group": "aws", "x": 1392, "y": 48 },
+    { "id": "ingesta", "label": "Lambda ingesta", "type": "function", "icon": "aws/lambda", "sub": "Descarga y guarda", "group": "aws", "x": 368, "y": 96 },
+    { "id": "bronce", "label": "S3 bronce", "type": "storage", "icon": "aws/s3", "sub": "Datos originales", "badge": "BRONCE", "group": "aws", "x": 712, "y": 96 },
+    { "id": "limpieza", "label": "Lambda limpieza", "type": "function", "icon": "aws/lambda", "sub": "Calidad y normalización", "group": "aws", "x": 1048, "y": 96 },
+    { "id": "plata", "label": "S3 plata", "type": "storage", "icon": "aws/s3", "sub": "Datos limpios en Parquet", "badge": "PLATA", "group": "aws", "x": 1392, "y": 152 },
+    { "id": "calculo", "label": "Lambda cálculo", "type": "function", "icon": "aws/lambda", "sub": "Índice del Taco", "group": "aws", "x": 1736, "y": 96 },
+    { "id": "oro", "label": "S3 oro", "type": "storage", "icon": "aws/s3", "sub": "Tablas de negocio", "badge": "ORO", "group": "aws", "x": 2080, "y": 96 },
+    { "id": "athena", "label": "Athena", "type": "analytics", "icon": "aws/athena", "sub": "Consultas SQL", "group": "aws", "x": 2416, "y": 96 },
+    { "id": "profeco", "label": "PROFECO", "type": "external", "sub": "Precios al menudeo", "x": 0, "y": 280 },
+    { "id": "sniim", "label": "SNIIM", "type": "external", "sub": "Precios de mayoreo", "x": 0, "y": 384 },
+    { "id": "inegi", "label": "INEGI", "type": "external", "sub": "Inflación (INPC)", "x": 0, "y": 488 },
+    { "id": "banxico", "label": "Banxico", "type": "external", "sub": "Indicadores económicos", "x": 0, "y": 592 },
+    { "id": "dashboard", "label": "Dashboard", "type": "web", "sub": "Lo que ve Doña Ofelia", "x": 2784, "y": 296 }
+  ],
+  "edges": [
+    { "id": "e1", "from": "eb", "to": "ingesta", "label": "Dispara cada semana" },
+    { "id": "e2", "from": "profeco", "to": "ingesta", "label": "Datos", "style": "data" },
+    { "id": "e3", "from": "sniim", "to": "ingesta", "label": "Datos", "style": "data" },
+    { "id": "e4", "from": "inegi", "to": "ingesta", "label": "Datos", "style": "data" },
+    { "id": "e5", "from": "banxico", "to": "ingesta", "label": "Datos", "style": "data" },
+    { "id": "e6", "from": "ingesta", "to": "bronce", "label": "Guarda crudo", "style": "data" },
+    { "id": "e7", "from": "bronce", "to": "limpieza", "label": "Lee", "style": "data" },
+    { "id": "e8", "from": "limpieza", "to": "plata", "label": "Datos limpios", "style": "data" },
+    { "id": "e9", "from": "plata", "to": "calculo", "label": "Lee", "style": "data" },
+    { "id": "e10", "from": "calculo", "to": "oro", "label": "Escribe tablas", "style": "data" },
+    { "id": "e11", "from": "oro", "to": "dashboard", "label": "Resultados", "style": "data" },
+    { "id": "e12", "from": "oro", "to": "athena", "label": "Consulta" },
+    { "id": "e13", "from": "limpieza", "to": "sns", "label": "Si falla", "style": "optional" }
+  ]
+}
