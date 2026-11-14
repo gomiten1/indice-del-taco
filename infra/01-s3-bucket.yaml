@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Bucket S3 del data lake (capa bronze) con buenas practicas basicas.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Nombre descriptivo del proyecto en minusculas, p. ej. indice-del-taco
+    AllowedPattern: "^[a-z0-9-]{3,30}$"
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+
+Resources:
+  BronzeBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain          # el bucket NO se borra si se borra el stack
+    UpdateReplacePolicy: Retain
+    Properties:
+      # El nombre debe ser unico a nivel global; el AccountId lo garantiza
+      BucketName: !Sub "${ProjectName}-${Environment}-bronze-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: limpiar-versiones-antiguas
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+Outputs:
+  BronzeBucketName:
+    Description: Nombre del bucket bronze
+    Value: !Ref BronzeBucket
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-bronze-bucket-name"
+  BronzeBucketArn:
+    Description: ARN del bucket bronze
+    Value: !GetAtt BronzeBucket.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-bronze-bucket-arn"
