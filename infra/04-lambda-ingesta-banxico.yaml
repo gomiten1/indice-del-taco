@@ -13,6 +13,13 @@ Parameters:
     Type: String
     Default: /indice-del-taco/dev/banxico_token
     Description: Parametro SecureString de SSM con el token de Banxico (se crea a mano, nunca en la plantilla)
+  CodeBucket:
+    Type: String
+    Description: Bucket de artefactos donde esta el .zip (ver 00-artefactos.yaml)
+  CodeKey:
+    Type: String
+    Default: lambdas/banxico.zip
+    Description: Llave del .zip dentro del bucket de artefactos
 
 Resources:
   BanxicoFunctionRole:
@@ -66,8 +73,9 @@ Resources:
             Fn::Sub: "${ProjectName}-${Environment}-bronze-bucket-name"
           BANXICO_TOKEN_PARAM: !Ref BanxicoTokenParameter
           BANXICO_SERIES: SP1
-      # Ruta local: `aws cloudformation package` la comprime y la sube (ver infra/README.md).
-      Code: ../src/ingesta
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
       Tags:
         - Key: project
           Value: !Ref ProjectName

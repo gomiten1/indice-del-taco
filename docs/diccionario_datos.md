@@ -18,7 +18,7 @@ Ruta: `s3://<bucket-bronze>/raw/<fuente>/<detalle>/fecha_ingesta=AAAA-MM-DD/<arc
 
 | Fuente | Ruta | Estado |
 | :---- | :---- | :---- |
-| Banxico SIE | `raw/banxico/SP1/fecha_ingesta=.../SP1_datos.json` y `SP1_metadatos.json` | Código listo (`src/ingesta/banxico.py`) |
+| Banxico SIE | `raw/banxico/SP1/fecha_ingesta=.../SP1_datos.json` y `SP1_metadatos.json` | Desplegada y probada (`src/ingesta/banxico.py`) |
 | PROFECO CSV | `raw/profeco/csv/bMM_AAAA_qN.csv` | Carga manual (403 desde clientes automáticos) |
 | Chat del proveedor | `raw/chat/fecha_ingesta=.../chat_proveedor.txt` | Sintético (`datos_sinteticos/`) |
 | Receta y ventas | `raw/interno/receta.csv`, `raw/interno/ventas_diarias.csv` | Sintético |

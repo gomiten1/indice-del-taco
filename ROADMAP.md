@@ -32,7 +32,7 @@ Sin esto el equipo no puede trabajar en paralelo.
 
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
-| 0.1 | Verificar qué hay desplegado en AWS (stacks `indice-taco-bronze` y `indice-taco-extract`) | D | Estado anotado en `infra/README.md` |
+| 0.1 | ✅ Cuenta vacía al 16/11; desplegados bronze, lake, artefactos y Banxico (ver ADR 0010). Verificar qué hay desplegado en AWS | D | Estado anotado en `infra/README.md` |
 | 0.2 | MFA en root, un usuario IAM por integrante, Budgets al 50% y 80% | D | Captura de la alarma activa |
 | 0.3 | ✅ (v0, falta revisión del equipo) Congelar los **contratos de datos**: esquema de silver y de las 5 tablas gold (columnas y tipos). La receta y los precios de proveedor son **datos o configuración**, no valores fijos en el código (requisito de N8) | D | `docs/diccionario_datos.md` v0 |
 | 0.4 | Decidir y escribir ADRs críticos: ingesta híbrida de PROFECO, descarte de SNIIM, frecuencia por fuente, proxies de pastor y suadero, capas, Parquet y catálogo (ADR 0002). Estadístico (0003), salsa (0005), merma (0008) y semana base (0009) ya decididos provisionalmente | D | ADRs 0002, 0003 y los listados en `fuentes.md` |
@@ -48,9 +48,9 @@ Sin esto el equipo no puede trabajar en paralelo.
 | :---- | :---- | :---- | :---- |
 | 1.1 | ✅ Generador sintético con semilla fija: chat del proveedor, receta, ventas (ene a sep 2026) con errores intencionales | D | `datos_sinteticos/`, misma semilla da mismos datos |
 | 1.2 | ✅ Parser del chat de WhatsApp (con y sin `$`, unidades implícitas, cambios relativos, correcciones, "lo demás igual") | D | `src/`, pruebas unitarias en verde |
-| 1.3 | ✅ Código y pruebas listos; **falta desplegar y probar en AWS**. Lambda de ingesta de Banxico a bronze: idempotente, con `fecha_ingesta`, token en Parameter Store | D | Doble ejecución sin duplicados, logs en CloudWatch |
+| 1.3 | ✅ Desplegada y probada en AWS (694 registros, doble ejecución sin llaves nuevas). Lambda de ingesta de Banxico a bronze: idempotente, con `fecha_ingesta`, token en Parameter Store | D | Doble ejecución sin duplicados, logs en CloudWatch |
 | 1.4 | PROFECO: script de carga manual a bronze (una quincena de CDMX como mínimo) | D | CSV en bronze, nombre `bMM_AAAA_qN` como llave |
-| 1.5 | ✅ Plantilla lista (`infra/03`); **falta desplegar**. Buckets silver, gold y cuarentena (plantillas hermanas de `01-s3-bucket.yaml`) | D | Stacks desplegados |
+| 1.5 | ✅ Desplegado (`infra/03`). Buckets silver, gold y cuarentena (plantillas hermanas de `01-s3-bucket.yaml`) | D | Stacks desplegados |
 | 1.6 | Lambda de ingesta de INEGI (falta el ID del INPC) | X | Banxico cubre el INPC general; se anota como limitación (cambio de alcance, ver "Pendientes de decidir") |
 | 1.7 | Encontrar y probar en Banxico (o INEGI) la serie de **inflación de alimentos**; N4 pide inflación general y de alimentos | D | Serie probada y anotada en `fuentes.md`; si no existe, limitación documentada |
 
