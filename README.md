@@ -141,6 +141,7 @@ Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del
 - [Fuentes de datos](docs/fuentes.md): validación de cada fuente.
 - [Diccionario de datos](docs/diccionario_datos.md) (v0)
 - [ADR 0001: Alcance](docs/adr/0001-alcance.md)
+- ADR [0003 estadístico](docs/adr/0003-estadistico-precio-semanal.md), [0005 salsa](docs/adr/0005-salsa.md), [0008 merma](docs/adr/0008-merma.md), [0009 semana base](docs/adr/0009-semana-base-indice.md)
 - [ADR 0007: Datos sintéticos](docs/adr/0007-datos-sinteticos-reconstruccion.md)
 
 ## Avance

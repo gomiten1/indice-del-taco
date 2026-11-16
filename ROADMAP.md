@@ -35,7 +35,7 @@ Sin esto el equipo no puede trabajar en paralelo.
 | 0.1 | Verificar qué hay desplegado en AWS (stacks `indice-taco-bronze` y `indice-taco-extract`) | D | Estado anotado en `infra/README.md` |
 | 0.2 | MFA en root, un usuario IAM por integrante, Budgets al 50% y 80% | D | Captura de la alarma activa |
 | 0.3 | ✅ (v0, falta revisión del equipo) Congelar los **contratos de datos**: esquema de silver y de las 5 tablas gold (columnas y tipos). La receta y los precios de proveedor son **datos o configuración**, no valores fijos en el código (requisito de N8) | D | `docs/diccionario_datos.md` v0 |
-| 0.4 | Decidir y escribir ADRs críticos: ingesta híbrida de PROFECO, descarte de SNIIM, frecuencia por fuente, proxies de pastor y suadero, estadístico semanal y semana base (ADR 0003), capas, Parquet y catálogo (ADR 0002) | D | ADRs 0002, 0003 y los listados en `fuentes.md` |
+| 0.4 | Decidir y escribir ADRs críticos: ingesta híbrida de PROFECO, descarte de SNIIM, frecuencia por fuente, proxies de pastor y suadero, capas, Parquet y catálogo (ADR 0002). Estadístico (0003), salsa (0005), merma (0008) y semana base (0009) ya decididos provisionalmente | D | ADRs 0002, 0003 y los listados en `fuentes.md` |
 | 0.5 | Reparto real de tareas por persona (los roles del SOW son nominales). Cada cambio entra por PR revisado por otra persona (SOW §7) | D | Tabla de responsables al final de este archivo |
 | 0.6 | Fijar receta (55 g de suadero, 50 g de pastor), catálogo de insumos y tabla de equivalencias de cortes con sus supuestos por escrito; enviar a la dueña las aclaraciones A1 a A6 | D | Receta e insumos en `datos_sinteticos/` y `aclaraciones.md` actualizado |
 | 0.7 | Conseguir el **brief del proyecto** (el SOW lo cita para el extracto del chat y el Anexo A de casos del parser; no está en el repo) | D | Brief disponible antes de la tarea 1.2 |
@@ -71,7 +71,7 @@ Arranca en paralelo con la Fase 2 usando datos sintéticos y los contratos de la
 
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
-| 3.0 | Decidir el costeo de la salsa y dejar escrito el tratamiento de la merma (ADR 0005); sin esto el índice no se puede calcular | D | ADR 0005 |
+| 3.0 | ✅ Costeo de la salsa y merma decididos (ADR 0005 y 0008) | D | ADR 0005 |
 | 3.1 | `costo_taco_semanal` e Índice base 100: `Σ cantidad_por_taco × precio_unitario` | D | Tabla gold, pruebas del cálculo |
 | 3.2 | `precio_insumo_semanal` y `comparativo_proveedor` (proveedor vs. menudeo y mayoreo PROFECO). Si falta el dato público de un insumo, se muestra "sin dato" | D | Tablas gold, marcadas como comparación aproximada |
 | 3.3 | `comparativo_inflacion` (índice vs. inflación general y de alimentos, misma base 100; frecuencia mensual) | D | Tabla gold |

@@ -122,8 +122,8 @@ Llave: (`anio`, `semana_iso`, `tipo_taco`, `incluye_merma`). **Pública.**
 | `tipo_taco` | string | `suadero` o `pastor` |
 | `costo_taco_mxn` | decimal(8,2) | Pesos por taco (lo pide N1) |
 | `indice_base100` | decimal(8,2) | Base 100 en `semana_base` |
-| `semana_base` | date | *Pendiente* (aclaración, pregunta 5; ADR 0003) |
-| `incluye_merma` | boolean | Versión con merma (ADR 0005) |
+| `semana_base` | date | Primera semana con todos los insumos con dato ([ADR 0009](adr/0009-semana-base-indice.md)) |
+| `incluye_merma` | boolean | Versión con merma solo para pastor ([ADR 0008](adr/0008-merma.md)) |
 | `insumos_con_dato` | int | Cuántos insumos de la receta tenían precio esa semana (completitud) |
 
 ### `precio_insumo_semanal` (P1, P3)
@@ -136,7 +136,7 @@ Llave: (`anio`, `semana_iso`, `insumo`, `fuente`). Las filas con `fuente = 'prov
 | `fuente` | string | `proveedor`, `menudeo`, `mayoreo` |
 | `precio_kg` | decimal(10,2) | |
 | `n_observaciones` | int | Cuántos precios se usaron |
-| `estadistico` | string | `mediana`, `media`, `media_recortada`. *Pendiente* (ADR 0003) |
+| `estadistico` | string | `mediana` ([ADR 0003](adr/0003-estadistico-precio-semanal.md)) |
 
 ### `comparativo_proveedor` (P2)
 Llave: (`anio`, `semana_iso`, `insumo`).
@@ -180,8 +180,8 @@ El snapshot que lee el dashboard excluye `precio_proveedor_kg` y las filas de `p
 
 | Qué | Dónde se decide |
 | :---- | :---- |
-| Estadístico del precio semanal y semana base | ADR 0003, aclaración pregunta 5 |
-| Salsa y merma | ADR 0005, aclaraciones A3 y A5 |
+| Confirmar con la dueña la semana base y la merma | Aclaración pregunta 5 y A5 (decididos provisionalmente en los ADR 0009 y 0008) |
+| Costo de la salsa | Aclaración pregunta 3 (excluida por ahora, [ADR 0005](adr/0005-salsa.md)) |
 | Regla para duplicados de PROFECO y equivalencias de cortes | ADR de proxies (ver `fuentes.md`) |
 | Serie de inflación de alimentos | Tarea 1.7 del roadmap |
 | Insumos de la receta además de la carne | Aclaración, pregunta 1 y 3 |
