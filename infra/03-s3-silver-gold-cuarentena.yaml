@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Buckets S3 de silver, gold y cuarentena del data lake (mismas buenas practicas que el bucket bronze).
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Nombre descriptivo del proyecto en minusculas, p. ej. indice-del-taco
+    AllowedPattern: "^[a-z0-9-]{3,30}$"
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+
+Resources:
+  SilverBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Environment}-silver-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: limpiar-versiones-antiguas
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+  GoldBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Environment}-gold-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: limpiar-versiones-antiguas
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+  QuarantineBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Environment}-quarantine-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: limpiar-versiones-antiguas
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+Outputs:
+  SilverBucketName:
+    Value: !Ref SilverBucket
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-silver-bucket-name"
+  SilverBucketArn:
+    Value: !GetAtt SilverBucket.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-silver-bucket-arn"
+  GoldBucketName:
+    Value: !Ref GoldBucket
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-gold-bucket-name"
+  GoldBucketArn:
+    Value: !GetAtt GoldBucket.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-gold-bucket-arn"
+  QuarantineBucketName:
+    Value: !Ref QuarantineBucket
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-quarantine-bucket-name"
+  QuarantineBucketArn:
+    Value: !GetAtt QuarantineBucket.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-quarantine-bucket-arn"

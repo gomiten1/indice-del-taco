@@ -11,6 +11,8 @@ código real de ingesta (Banxico, PROFECO, INEGI) y las capas silver / gold.
 |---|---|
 | `01-s3-bucket.yaml` | Bucket S3 de la capa bronze: versionado, cifrado (AES‑256), acceso público bloqueado, ciclo de vida que borra versiones antiguas a los 30 días, `DeletionPolicy: Retain` (no se borra con el stack). Exporta `BronzeBucketName` y `BronzeBucketArn`. |
 | `02-lambda.yaml` | Lambda `python3.13` con rol IAM de mínimo privilegio (solo `s3:PutObject` bajo `raw/` del bucket bronze), LogGroup explícito con 14 días de retención y un `handler` de demostración. Importa `BronzeBucketArn` y `BronzeBucketName` del stack del bucket. |
+| `03-s3-silver-gold-cuarentena.yaml` | Tres buckets (silver, gold, cuarentena) con las mismas prácticas que bronze. Exporta nombre y ARN de cada uno. |
+| `04-lambda-ingesta-banxico.yaml` | Lambda `python3.13` que descarga el INPC de Banxico a `raw/banxico/` de bronze. Rol con solo `s3:PutObject` en ese prefijo y `ssm:GetParameter` sobre su token. Código en `src/ingesta/banxico.py`. |
 
 ## Orden de despliegue
 
@@ -35,6 +37,30 @@ aws cloudformation deploy \
 
 El flag `--capabilities CAPABILITY_NAMED_IAM` es necesario porque la
 plantilla de la Lambda crea un rol con `RoleName` explícito.
+
+## Desplegar silver/gold y la ingesta de Banxico
+
+Validar sin AWS (cualquiera puede hacerlo): `.venv/bin/cfn-lint infra/*.yaml`.
+
+```bash
+# 1) Buckets silver, gold y cuarentena
+aws cloudformation deploy --template-file 03-s3-silver-gold-cuarentena.yaml \
+  --stack-name indice-taco-lake --parameter-overrides ProjectName=indice-del-taco Environment=dev
+
+# 2) Token de Banxico en Parameter Store (se lee de .env; no se imprime ni se guarda en el repo)
+set -a; source ../.env; set +a
+aws ssm put-parameter --name /indice-del-taco/dev/banxico_token --type SecureString --value "$BANXICO_TOKEN"
+
+# 3) Empaquetar y desplegar la Lambda (necesita un bucket para el .zip, distinto de los del data lake)
+aws cloudformation package --template-file 04-lambda-ingesta-banxico.yaml \
+  --s3-bucket <bucket-de-artefactos> --output-template-file build/04-empaquetado.yaml
+aws cloudformation deploy --template-file build/04-empaquetado.yaml \
+  --stack-name indice-taco-banxico --parameter-overrides ProjectName=indice-del-taco Environment=dev \
+  --capabilities CAPABILITY_NAMED_IAM
+
+# 4) Probarla dos veces: la segunda no debe crear objetos nuevos (misma llave por fecha_ingesta)
+aws lambda invoke --function-name indice-del-taco-dev-ingesta-banxico out.json && cat out.json
+```
 
 ## Parámetros
 

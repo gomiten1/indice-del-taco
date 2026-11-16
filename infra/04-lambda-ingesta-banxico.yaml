@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Lambda de ingesta de Banxico (INPC) hacia bronze, con rol de minimo privilegio.
+
+Parameters:
+  ProjectName:
+    Type: String
+    AllowedPattern: "^[a-z0-9-]{3,30}$"
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+  BanxicoTokenParameter:
+    Type: String
+    Default: /indice-del-taco/dev/banxico_token
+    Description: Parametro SecureString de SSM con el token de Banxico (se crea a mano, nunca en la plantilla)
+
+Resources:
+  BanxicoFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-banxico-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: banxico-bronze-y-token
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:PutObject
+                # Solo puede escribir bajo raw/banxico/ del bucket bronze
+                Resource: !Sub
+                  - "${BucketArn}/raw/banxico/*"
+                  - BucketArn: !ImportValue
+                      Fn::Sub: "${ProjectName}-${Environment}-bronze-bucket-arn"
+              - Effect: Allow
+                Action: ssm:GetParameter
+                # Solo puede leer su propio token
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BanxicoTokenParameter}"
+
+  BanxicoFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-${Environment}-ingesta-banxico"
+      RetentionInDays: 14
+
+  BanxicoFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: BanxicoFunctionLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-ingesta-banxico"
+      Runtime: python3.13
+      Handler: banxico.handler
+      Role: !GetAtt BanxicoFunctionRole.Arn
+      Timeout: 60
+      MemorySize: 128
+      Environment:
+        Variables:
+          BRONZE_BUCKET: !ImportValue
+            Fn::Sub: "${ProjectName}-${Environment}-bronze-bucket-name"
+          BANXICO_TOKEN_PARAM: !Ref BanxicoTokenParameter
+          BANXICO_SERIES: SP1
+      # Ruta local: `aws cloudformation package` la comprime y la sube (ver infra/README.md).
+      Code: ../src/ingesta
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+Outputs:
+  BanxicoFunctionName:
+    Value: !Ref BanxicoFunction
+  BanxicoFunctionArn:
+    Value: !GetAtt BanxicoFunction.Arn
