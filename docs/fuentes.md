@@ -108,8 +108,39 @@ Los tipos se infieren de la muestra; no hay diccionario de datos oficial.
 
 ## Pendientes
 
-- [ ] ID del INPC en INEGI (Constructor de consultas).
+- [ ] ID del INPC en INEGI (Constructor de consultas o rastreo sobre el catálogo `CL_INDICATOR/null`, ver nota en la validación del 14/11).
 - [ ] Bajar otra quincena de PROFECO y confirmar que el esquema es el mismo.
 - [ ] Probar la descarga de PROFECO desde AWS.
 - [ ] Probar Banxico por rango de fechas.
 - [ ] ADRs: ingesta híbrida de PROFECO, frecuencia por fuente, descarte de SNIIM, proxies de pastor y suadero.
+
+## Validación del 14/11/2026
+
+Segunda ronda de sondeo, hecha desde la misma máquina Windows, con los tokens reales ya cargados en `.env`. El objetivo no fue redescubrir fuentes sino confirmar que lo documentado el 24-25/10 sigue vigente y dejar la primera ingesta local en disco (ver `bronze_local/`).
+
+### Banxico SIE (INPC)
+
+- `GET /SieAPIRest/service/v1/series/SP1/datos/oportuno` con header `Bmx-Token` → **200 OK**.
+- Último dato: **01/10/2026 = 147.026** (una lectura más fresca que el 01/09/2026 = 146.075 que estaba en esta misma hoja).
+- Serie histórica completa descargada: 694 observaciones, 01/01/1969 → 01/10/2026 (33 KB). Guardada en `bronze_local/banxico/SP1/`.
+
+### PROFECO (CKAN y CSV)
+
+- CKAN confirmado en `https://www.datos.gob.mx/api/3/action/package_show?id=programa_quien_es_quien_precios_<anio>`. Se bajó `package_show` para 2024, 2025 y 2026 (en `bronze_local/profeco/ckan/`).
+- **HEAD a los 55 CSV listados por CKAN (24 de 2024 + 22 de 2025 + 9 de 2026): 55/55 devolvieron 403 Akamai** desde `repodatos.atdt.gob.mx` con `curl -A "Mozilla/5.0"`. El bloqueo persiste. Log completo en `bronze_local/profeco/csv/intentos_2026-11-14.tsv`.
+- Pendiente de resolver en un ADR: ingesta híbrida (manual) vs. Lambda con headers completos desde otra IP.
+
+### INEGI
+
+- Token validado contra `INDICATOR/1002000001` con área `00` (nacional) → 200 OK con 16 observaciones de "Población total". Nota: con área `0700` (CDMX) ese mismo indicador devuelve `ErrorCode:100 — No se encontraron resultados`, el área importa.
+- **Tema del INPC = `0137`** (descripción oficial: "Índice Nacional de Precios al Consumidor"), confirmado por barrido sobre `CL_TOPIC`.
+- **Truco para listar catálogos:** usar `IdCatalogo=null` en los endpoints `CL_*`. En particular `CL_INDICATOR/null/es/BISE/2.0/<token>?type=json` devuelve el **catálogo completo de 32,314 indicadores** en un solo JSON de 3.86 MB (guardado en `bronze_local/inegi/catalogo/`). Esto corrige lo que decía esta misma hoja ("CL_INDICATOR responde 'No autorizado', error 110"): el problema era el parámetro, no los permisos. Con el catálogo local se puede rastrear el ID del INPC desde Python sin volver a golpear la API.
+
+### Formato de URL de INEGI
+
+Pequeña corrección redundante (ya estaba en esta hoja, pero vale reforzar): la fuente de datos en el URL es `BISE`, no `BIE`. Los ejemplos oficiales de INEGI siempre la usan así; probada contra `BIE` devuelve `ErrorCode:100`.
+
+### Lo que sigue abierto
+
+- **ID exacto del INPC general en INEGI.** Candidatos probados en esta ronda (`910391`, `910392`, `910395`, `910400-910412`, `910415`, `910420-910422`, `628193`, `628194`, `628223`, `628224`, `628229`, `737121`, `216064`, `463300`, `450068`, `1005000001`): todos devolvieron `ErrorCode:100`. El Constructor de consultas sigue siendo el camino oficial; alternativa: grep sobre `CL_INDICATOR_2026-11-14.json` buscando descripciones del tipo "Indice general", "subyacente", "no subyacente".
+- Banxico ya cubre P4 (comparativo contra inflación) por completo; INEGI quedaría como fuente de contraste, no bloqueante.
