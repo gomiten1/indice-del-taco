@@ -118,7 +118,7 @@ Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del
 │   ├── adr/                # Registros de decisiones de arquitectura
 │   ├── img/                # Diagrama de arquitectura (PNG y JSON de Diagramon)
 │   ├── fuentes.md          # Catálogo y validación de las fuentes de datos
-│   ├── diccionario_datos.md # [EN CONSTRUCCIÓN]
+│   ├── diccionario_datos.md # Contrato de silver y gold (v0)
 │   ├── runbook.md          # [EN CONSTRUCCIÓN]
 │   └── costos.md           # [EN CONSTRUCCIÓN]
 ├── infra/                  # [EN CONSTRUCCIÓN] Plantillas de CloudFormation
@@ -139,6 +139,7 @@ Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del
 - [SOW](docs/consultoria/sow.md): alcance, entregables, hitos y presupuesto.
 - [Aclaraciones](docs/consultoria/aclaraciones.md): contradicciones encontradas y preguntas pendientes.
 - [Fuentes de datos](docs/fuentes.md): validación de cada fuente.
+- [Diccionario de datos](docs/diccionario_datos.md) (v0)
 - [ADR 0001: Alcance](docs/adr/0001-alcance.md)
 - [ADR 0007: Datos sintéticos](docs/adr/0007-datos-sinteticos-reconstruccion.md)
 

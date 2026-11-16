@@ -34,7 +34,7 @@ Sin esto el equipo no puede trabajar en paralelo.
 | :---- | :---- | :---- | :---- |
 | 0.1 | Verificar qué hay desplegado en AWS (stacks `indice-taco-bronze` y `indice-taco-extract`) | D | Estado anotado en `infra/README.md` |
 | 0.2 | MFA en root, un usuario IAM por integrante, Budgets al 50% y 80% | D | Captura de la alarma activa |
-| 0.3 | Congelar los **contratos de datos**: esquema de silver y de las 5 tablas gold (columnas y tipos). La receta y los precios de proveedor son **datos o configuración**, no valores fijos en el código (requisito de N8) | D | `docs/diccionario_datos.md` v0 |
+| 0.3 | ✅ (v0, falta revisión del equipo) Congelar los **contratos de datos**: esquema de silver y de las 5 tablas gold (columnas y tipos). La receta y los precios de proveedor son **datos o configuración**, no valores fijos en el código (requisito de N8) | D | `docs/diccionario_datos.md` v0 |
 | 0.4 | Decidir y escribir ADRs críticos: ingesta híbrida de PROFECO, descarte de SNIIM, frecuencia por fuente, proxies de pastor y suadero, estadístico semanal y semana base (ADR 0003), capas, Parquet y catálogo (ADR 0002) | D | ADRs 0002, 0003 y los listados en `fuentes.md` |
 | 0.5 | Reparto real de tareas por persona (los roles del SOW son nominales). Cada cambio entra por PR revisado por otra persona (SOW §7) | D | Tabla de responsables al final de este archivo |
 | 0.6 | Fijar receta (55 g de suadero, 50 g de pastor), catálogo de insumos y tabla de equivalencias de cortes con sus supuestos por escrito; enviar a la dueña las aclaraciones A1 a A6 | D | Receta e insumos en `datos_sinteticos/` y `aclaraciones.md` actualizado |
@@ -48,9 +48,9 @@ Sin esto el equipo no puede trabajar en paralelo.
 | :---- | :---- | :---- | :---- |
 | 1.1 | ✅ Generador sintético con semilla fija: chat del proveedor, receta, ventas (ene a sep 2026) con errores intencionales | D | `datos_sinteticos/`, misma semilla da mismos datos |
 | 1.2 | ✅ Parser del chat de WhatsApp (con y sin `$`, unidades implícitas, cambios relativos, correcciones, "lo demás igual") | D | `src/`, pruebas unitarias en verde |
-| 1.3 | Lambda de ingesta de Banxico a bronze: idempotente, con `fecha_ingesta`, token en Parameter Store | D | Doble ejecución sin duplicados, logs en CloudWatch |
+| 1.3 | ✅ Código y pruebas listos; **falta desplegar y probar en AWS**. Lambda de ingesta de Banxico a bronze: idempotente, con `fecha_ingesta`, token en Parameter Store | D | Doble ejecución sin duplicados, logs en CloudWatch |
 | 1.4 | PROFECO: script de carga manual a bronze (una quincena de CDMX como mínimo) | D | CSV en bronze, nombre `bMM_AAAA_qN` como llave |
-| 1.5 | Buckets silver, gold y cuarentena (plantillas hermanas de `01-s3-bucket.yaml`) | D | Stacks desplegados |
+| 1.5 | ✅ Plantilla lista (`infra/03`); **falta desplegar**. Buckets silver, gold y cuarentena (plantillas hermanas de `01-s3-bucket.yaml`) | D | Stacks desplegados |
 | 1.6 | Lambda de ingesta de INEGI (falta el ID del INPC) | X | Banxico cubre el INPC general; se anota como limitación (cambio de alcance, ver "Pendientes de decidir") |
 | 1.7 | Encontrar y probar en Banxico (o INEGI) la serie de **inflación de alimentos**; N4 pide inflación general y de alimentos | D | Serie probada y anotada en `fuentes.md`; si no existe, limitación documentada |
 
