@@ -2,7 +2,7 @@
 
 Descarga cada serie tal cual la entrega Banxico (sin transformar) y la guarda en S3 bajo
 `raw/banxico/<serie>/fecha_ingesta=AAAA-MM-DD/`. Ejecutarla dos veces el mismo día escribe en
-las mismas llaves, así que no duplica nada. Solo usa la biblioteca estándar y boto3 (que ya
+las mismas llaves y, si el contenido no cambió, ni siquiera se reescribe. Solo usa la biblioteca estándar y boto3 (que ya
 viene en el runtime de Lambda); el token nunca se escribe en logs ni en mensajes de error.
 
 Variables de entorno:
@@ -15,6 +15,7 @@ Evento opcional: {"fecha_ingesta": "AAAA-MM-DD", "series": ["SP1"]} para repetir
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -71,17 +72,34 @@ def validar_datos(serie: str, cuerpo: bytes) -> int:
     return len(datos)
 
 
+def _ya_esta_igual(s3, bucket: str, clave: str, cuerpo: bytes) -> bool:
+    """True si la llave ya existe con el mismo contenido. Para cargas de una parte con SSE-S3 el ETag es el MD5."""
+    try:
+        etag = s3.head_object(Bucket=bucket, Key=clave)["ETag"].strip('"')
+    except Exception as e:  # ClientError de boto3 (no se importa aquí para poder probar sin boto3)
+        codigo = getattr(e, "response", {}).get("Error", {}).get("Code")
+        if codigo in ("404", "NoSuchKey", "NotFound"):
+            return False
+        raise  # un 403 u otro error real no se confunde con "no existe"
+    return etag == hashlib.md5(cuerpo).hexdigest()
+
+
 def ingestar_serie(serie: str, fecha_ingesta: str, token: str, bucket: str, s3,
                    abrir=urllib.request.urlopen) -> dict:
     datos = descargar(url_datos(serie), token, abrir=abrir)
     registros = validar_datos(serie, datos)  # primero se valida; si falla no se escribe nada
     metadatos = descargar(url_metadatos(serie), token, abrir=abrir)
-    claves = []
+    claves, escritas, omitidas = [], [], []
     for tipo, cuerpo in (("datos", datos), ("metadatos", metadatos)):
         clave = clave_s3(serie, fecha_ingesta, tipo)
-        s3.put_object(Bucket=bucket, Key=clave, Body=cuerpo, ContentType="application/json")
         claves.append(clave)
-    return {"serie": serie, "registros": registros, "bytes": len(datos), "claves": claves}
+        if _ya_esta_igual(s3, bucket, clave, cuerpo):
+            omitidas.append(clave)  # mismo contenido: no se reescribe (evita versiones repetidas)
+        else:
+            s3.put_object(Bucket=bucket, Key=clave, Body=cuerpo, ContentType="application/json")
+            escritas.append(clave)
+    return {"serie": serie, "registros": registros, "bytes": len(datos),
+            "claves": claves, "escritas": escritas, "omitidas": omitidas}
 
 
 def obtener_token(ssm=None) -> str:

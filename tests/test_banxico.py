@@ -1,4 +1,5 @@
 """Pruebas de la ingesta de Banxico: sin red y sin AWS (clientes simulados)."""
+import hashlib
 import json
 from pathlib import Path
 from urllib.error import HTTPError
@@ -37,12 +38,25 @@ class BancoFalso:
         return Respuesta(self.datos if req.full_url.endswith("/datos") else META.read_bytes())
 
 
+class NoExiste(Exception):
+    """Imita el ClientError de boto3 para una llave que no existe."""
+    def __init__(self, codigo="404"):
+        self.response = {"Error": {"Code": codigo}}
+
+
 class S3Falso:
     def __init__(self):
         self.objetos = {}
+        self.escrituras = 0
 
     def put_object(self, Bucket, Key, Body, **kw):
+        self.escrituras += 1
         self.objetos[(Bucket, Key)] = Body
+
+    def head_object(self, Bucket, Key):
+        if (Bucket, Key) not in self.objetos:
+            raise NoExiste()
+        return {"ETag": '"' + hashlib.md5(self.objetos[(Bucket, Key)]).hexdigest() + '"'}
 
 
 def test_clave_s3_lleva_fecha_ingesta():
@@ -94,11 +108,31 @@ def test_ingestar_guarda_datos_y_metadatos_en_bronze():
     assert s3.objetos[("bucket-bronze", r["claves"][0])] == FIXTURE.read_bytes()  # tal cual, sin transformar
 
 
-def test_doble_ejecucion_no_duplica():
+def test_doble_ejecucion_no_duplica_ni_reescribe():
     s3 = S3Falso()
-    for _ in range(2):
-        banxico.ingestar_serie("SP1", "2026-11-14", TOKEN, "b", s3, BancoFalso())
-    assert len(s3.objetos) == 2  # mismas llaves, se sobrescriben
+    r1 = banxico.ingestar_serie("SP1", "2026-11-14", TOKEN, "b", s3, BancoFalso())
+    r2 = banxico.ingestar_serie("SP1", "2026-11-14", TOKEN, "b", s3, BancoFalso())
+    assert len(s3.objetos) == 2
+    assert s3.escrituras == 2  # solo la primera vez
+    assert len(r1["escritas"]) == 2 and r1["omitidas"] == []
+    assert r2["escritas"] == [] and len(r2["omitidas"]) == 2
+
+
+def test_si_cambia_el_contenido_se_sobrescribe():
+    s3 = S3Falso()
+    banxico.ingestar_serie("SP1", "2026-11-14", TOKEN, "b", s3, BancoFalso())
+    nuevo = json.loads(FIXTURE.read_bytes())
+    nuevo["bmx"]["series"][0]["datos"].append({"fecha": "01/11/2026", "dato": "148.000000000000"})
+    r = banxico.ingestar_serie("SP1", "2026-11-14", TOKEN, "b", s3, BancoFalso(json.dumps(nuevo).encode()))
+    assert len(r["escritas"]) == 1 and r["registros"] == 695  # datos cambio; metadatos igual
+
+
+def test_un_error_distinto_de_no_existe_se_propaga():
+    class S3SinPermiso(S3Falso):
+        def head_object(self, Bucket, Key):
+            raise NoExiste("403")
+    with pytest.raises(NoExiste):
+        banxico.ingestar_serie("SP1", "2026-11-14", TOKEN, "b", S3SinPermiso(), BancoFalso())
 
 
 def test_handler_usa_evento_y_entorno(monkeypatch):

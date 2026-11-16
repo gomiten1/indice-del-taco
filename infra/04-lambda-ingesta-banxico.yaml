@@ -47,6 +47,21 @@ Resources:
                   - BucketArn: !ImportValue
                       Fn::Sub: "${ProjectName}-${Environment}-bronze-bucket-arn"
               - Effect: Allow
+                # Leer solo su carpeta: compara el ETag para no reescribir lo que no cambio
+                Action: s3:GetObject
+                Resource: !Sub
+                  - "${BucketArn}/raw/banxico/*"
+                  - BucketArn: !ImportValue
+                      Fn::Sub: "${ProjectName}-${Environment}-bronze-bucket-arn"
+              - Effect: Allow
+                # Sin ListBucket, S3 responde 403 (en vez de 404) si la llave no existe
+                Action: s3:ListBucket
+                Resource: !ImportValue
+                  Fn::Sub: "${ProjectName}-${Environment}-bronze-bucket-arn"
+                Condition:
+                  StringLike:
+                    "s3:prefix": "raw/banxico/*"
+              - Effect: Allow
                 Action: ssm:GetParameter
                 # Solo puede leer su propio token
                 Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BanxicoTokenParameter}"
