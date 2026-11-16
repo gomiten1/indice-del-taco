@@ -4,7 +4,7 @@ Contrato entre capas: lo que cada tabla de **silver** y **gold** debe tener. Sir
 
 ## Convenciones
 
-- **Semana:** semana ISO (lunes a domingo). El precio de la semana es el **último precio vigente al domingo 23:59** (aclaración A6), para tener el costo listo el lunes 9:00 (N1). Columnas `anio` y `semana_iso`; `semana_inicio` es el lunes.
+- **Semana:** semana ISO (lunes a domingo); `anio` es el **año ISO** (el 29/12/2025 cae en la semana 1 de 2026). El precio de la semana es el **último precio vigente al domingo 23:59** (aclaración A6), para tener el costo listo el lunes 9:00 (N1). Columnas `anio` y `semana_iso`; `semana_inicio` es el lunes.
 - **Idempotencia:** cada tabla tiene una *llave natural*. Reprocesar una semana **reemplaza** sus filas, nunca las duplica (N6).
 - **Trazabilidad:** toda fila de silver lleva `fecha_ingesta` (qué descarga la originó) y `archivo_origen`.
 - **Tipos:** dinero `decimal(10,2)`, índices `decimal(12,6)`, fechas en `date`, marcas de tiempo en `timestamp` (hora de CDMX).
@@ -27,7 +27,7 @@ Ruta: `s3://<bucket-bronze>/raw/<fuente>/<detalle>/fecha_ingesta=AAAA-MM-DD/<arc
 ## Silver (Parquet limpio)
 
 ### `silver_precio_proveedor`
-Origen: chat parseado por `src/ingesta/parser_chat.py`. Llave: (`fecha_hora`, `producto`).
+Origen: chat parseado por `src/ingesta/parser_chat.py`; lo implementa `src/transformacion/silver_chat.py`. Llave: (`fecha_hora`, `producto`). `anio` y `semana_iso` van en la ruta del archivo, no dentro de él. Unidades aceptadas: `kg` y `pieza`.
 
 | Columna | Tipo | Descripción |
 | :---- | :---- | :---- |
@@ -37,6 +37,7 @@ Origen: chat parseado por `src/ingesta/parser_chat.py`. Llave: (`fecha_hora`, `p
 | `precio_unitario` | decimal(10,2) | Pesos por `unidad` |
 | `unidad` | string | `kg` o `pieza` |
 | `tipo_registro` | string | `explicito`, `relativo`, `correccion`, `repetido` |
+| `sospechoso` | boolean | Variación de más de 25 % contra el precio anterior del mismo producto. Se marca, **no se descarta** |
 | `archivo_origen`, `linea` | string, int | Dónde está en el chat |
 | `fecha_ingesta` | date | |
 
@@ -90,7 +91,7 @@ Todo lo que no pasa las reglas de calidad. Se guarda en su propio bucket.
 | Columna | Tipo | Descripción |
 | :---- | :---- | :---- |
 | `fuente` | string | `chat`, `profeco`, `banxico` |
-| `regla` | string | `precio_invalido`, `fecha_invalida`, `unidad_desconocida`, `cambio_relativo_sin_base`, `esquema`, etc. |
+| `regla` | string | `precio_invalido`, `fecha_invalida`, `fecha_futura`, `unidad_desconocida`, `unidad_no_soportada` (p. ej. paquete), `cambio_relativo_sin_base`, `esquema`, etc. Alerta si se rechaza más del 10 % de los registros |
 | `motivo` | string | Detalle legible |
 | `registro_original` | string | La fila o mensaje tal cual |
 | `archivo_origen`, `linea` | string, int | |

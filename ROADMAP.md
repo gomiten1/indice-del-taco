@@ -58,10 +58,10 @@ Sin esto el equipo no puede trabajar en paralelo.
 
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
-| 2.1 | Lambda de limpieza: tipos, catálogo de insumos, normalización de unidades a kg/pieza, filtro CDMX | D | Parquet particionado por año/semana |
+| 2.1 | ✅ Silver del chat hecho y probado en local (falta empaquetarlo como Lambda y PROFECO). Lambda de limpieza: tipos, catálogo de insumos, normalización de unidades a kg/pieza, filtro CDMX | D | Parquet particionado por año/semana |
 | 2.2 | Resolver duplicados de PROFECO (hay ~11k combinaciones repetidas por quincena) | D | Regla documentada y probada |
 | 2.2b | Leer los CSV de PROFECO (223 MB) por partes, filtrando CDMX y columnas, sin exceder memoria ni tiempo de Lambda | D | Decisión en ADR; prueba con un archivo real |
-| 2.3 | Reglas de calidad: precio > 0, fecha válida, unidad reconocida, variación semanal razonable, esquema esperado, completitud; umbral de cuarentena que dispara alerta | D | Cuarentena trazable, pruebas unitarias |
+| 2.3 | ✅ Hechas para el chat (umbral de cuarentena 10 %, variación 25 %). Reglas de calidad: precio > 0, fecha válida, unidad reconocida, variación semanal razonable, esquema esperado, completitud; umbral de cuarentena que dispara alerta | D | Cuarentena trazable, pruebas unitarias |
 | 2.4 | Glue Data Catalog (DDL manual) y consultas en Athena | D | Tablas consultables en `sql/` |
 | 2.5 | Comparación de bytes escaneados CSV vs. Parquet (criterio de E3) | D | Número en el README |
 

@@ -87,6 +87,12 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 
 Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del chat vive en `src/ingesta/parser_chat.py`.
 
+Para generar silver y cuarentena en local (Parquet particionado por año y semana ISO):
+
+```bash
+PYTHONPATH=.:src .venv/bin/python -m transformacion.silver_chat --fecha-ingesta 2026-11-16   # lee data/sintetico, escribe data/lake
+```
+
 ## Cómo desplegarlo
 
 [EN CONSTRUCCIÓN] *La plantilla `infra/template.yaml` todavía no existe; estos son los pasos previstos. Se confirmarán cuando esté lista (H7).*
@@ -122,7 +128,7 @@ Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del
 │   ├── runbook.md          # [EN CONSTRUCCIÓN]
 │   └── costos.md           # [EN CONSTRUCCIÓN]
 ├── infra/                  # [EN CONSTRUCCIÓN] Plantillas de CloudFormation
-├── src/                    # ingesta/parser_chat.py; [EN CONSTRUCCIÓN] transformacion, calidad y gold
+├── src/                    # ingesta/ (parser, Banxico) y transformacion/ (silver del chat); [EN CONSTRUCCIÓN] PROFECO, gold
 ├── sql/                    # [EN CONSTRUCCIÓN] DDL de Athena y consultas por pregunta
 ├── datos_sinteticos/       # Generador reproducible (semilla fija)
 ├── dashboard/              # [EN CONSTRUCCIÓN]
