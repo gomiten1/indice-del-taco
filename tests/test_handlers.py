@@ -5,7 +5,7 @@ import pytest
 
 from datos_sinteticos.generador import generar_chat
 from handlers import gold, silver
-from tests.fakes import FakeS3, NoSuchKey
+from tests.fakes import FakeS3
 
 BANXICO = (Path(__file__).parent.parent / "bronze_local/banxico/SP1/SP1_datos_2026-11-14.json").read_bytes()
 RECETA = "producto,gramos_por_taco\nsuadero,55\npastor,50\n"
@@ -53,8 +53,33 @@ def test_silver_avisa_si_la_cuarentena_pasa_del_umbral(s3):
 
 def test_silver_sin_el_archivo_de_bronze_falla(s3):
     s3.objetos.pop(("bronze", f"raw/banxico/SP1/fecha_ingesta={FECHA}/SP1_datos.json"))
-    with pytest.raises(NoSuchKey):
+    with pytest.raises(FileNotFoundError, match="raw/banxico"):
         silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)
+
+
+def test_silver_usa_el_archivo_mas_reciente_disponible(s3):
+    """El chat no se sube cada semana: la corrida del 23 usa el del 16 y deja la fecha de origen a la vista."""
+    s3.put_object(Bucket="bronze", Key="raw/banxico/SP1/fecha_ingesta=2026-11-23/SP1_datos.json", Body=BANXICO)
+    r = silver.handler({"fecha_ingesta": "2026-11-23"}, None, s3=s3)
+    assert r["fechas_origen"] == {"chat": FECHA, "banxico": "2026-11-23", "receta": FECHA}
+    assert r["alertas"] == []  # 7 dias de rezago del chat: todavia dentro de lo normal
+
+
+def test_silver_avisa_si_una_fuente_esta_atrasada(s3):
+    s3.put_object(Bucket="bronze", Key="raw/banxico/SP1/fecha_ingesta=2026-12-01/SP1_datos.json", Body=BANXICO)
+    r = silver.handler({"fecha_ingesta": "2026-12-01"}, None, s3=s3)
+    assert r["alertas"] == ["chat: datos de hace 15 dias (mas de 10)"]  # la receta casi no cambia: no cuenta
+
+
+def test_silver_ignora_archivos_de_fechas_futuras(s3):
+    s3.put_object(Bucket="bronze", Key="raw/chat/fecha_ingesta=2027-01-01/chat_proveedor.txt", Body=b"basura")
+    assert silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)["fechas_origen"]["chat"] == FECHA
+
+
+@pytest.mark.parametrize("handler", [silver.handler, gold.handler])
+def test_simular_falla_lanza_el_error_de_prueba(handler, s3):
+    with pytest.raises(RuntimeError, match="simulada"):
+        handler({"fecha_ingesta": FECHA, "simular_falla": True}, None, s3=s3)
 
 
 @pytest.mark.parametrize("handler", [silver.handler, gold.handler])

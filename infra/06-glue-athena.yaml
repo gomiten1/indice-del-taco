@@ -268,6 +268,36 @@ Resources:
           SerdeInfo:
             SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
 
+  RegistroEjecuciones:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref Database
+      TableInput:
+        Name: registro_ejecuciones
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+          "parquet.compression": SNAPPY
+        StorageDescriptor:
+          Columns:
+            - { Name: ejecucion_id, Type: string }
+            - { Name: fecha_hora_inicio, Type: timestamp }
+            - { Name: fecha_ingesta, Type: date }
+            - { Name: etapa, Type: string }
+            - { Name: fuente, Type: string }
+            - { Name: registros_leidos, Type: int }
+            - { Name: aceptados, Type: int }
+            - { Name: rechazados, Type: int }
+            - { Name: duracion_s, Type: "decimal(8,2)" }
+            - { Name: estado, Type: string }
+            - { Name: detalle, Type: string }
+          Location: !Sub ["s3://${B}/registro_ejecuciones/", { B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-name" } }]
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+
 Outputs:
   DatabaseName:
     Value: !Ref Database

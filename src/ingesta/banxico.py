@@ -117,6 +117,8 @@ def obtener_token(ssm=None) -> str:
 
 def handler(event, context, s3=None, abrir=urllib.request.urlopen, ssm=None) -> dict:
     event = event or {}
+    if event.get("simular_falla"):
+        raise IngestaError("Falla simulada a propósito en la etapa ingesta")
     bucket = os.environ.get("BRONZE_BUCKET")
     if not bucket:
         raise IngestaError("Falta la variable de entorno BRONZE_BUCKET")

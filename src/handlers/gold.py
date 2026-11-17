@@ -8,12 +8,14 @@ from __future__ import annotations
 import os
 from datetime import datetime
 
+from handlers.comun import revisar_simulacion
 from transformacion import gold, parquet
 from transformacion.almacen import AlmacenS3
 
 
 def handler(event, context, s3=None) -> dict:
     event = event or {}
+    revisar_simulacion(event, "gold")
     semana_base = None
     if event.get("fecha_ingesta"):  # se acepta (y valida) para poder encadenar con silver con el mismo evento
         from handlers.silver import fecha_del_evento
