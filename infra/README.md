@@ -14,6 +14,8 @@ código real de ingesta (Banxico, PROFECO, INEGI) y las capas silver / gold.
 | `02-lambda.yaml` | Lambda `python3.13` con rol IAM de mínimo privilegio (solo `s3:PutObject` bajo `raw/` del bucket bronze), LogGroup explícito con 14 días de retención y un `handler` de demostración. Importa `BronzeBucketArn` y `BronzeBucketName` del stack del bucket. |
 | `03-s3-silver-gold-cuarentena.yaml` | Tres buckets (silver, gold, cuarentena) con las mismas prácticas que bronze. Exporta nombre y ARN de cada uno. |
 | `04-lambda-ingesta-banxico.yaml` | Lambda `python3.13` que descarga el INPC de Banxico a `raw/banxico/` de bronze. Rol con solo `s3:PutObject` en ese prefijo y `ssm:GetParameter` sobre su token. Código en `src/ingesta/banxico.py`. |
+| `05-lambdas-silver-gold.yaml` | Lambdas de silver y gold (un paquete, dos handlers) con roles de mínimo privilegio por bucket y la capa de pandas. |
+| `06-glue-athena.yaml` | Base de datos y tablas de Glue (DDL manual, partition projection), workgroup de Athena con tope de bytes y bucket de resultados. |
 
 ## Orden de despliegue
 
@@ -64,6 +66,26 @@ aws cloudformation deploy --template-file 04-lambda-ingesta-banxico.yaml --stack
 # Probarla dos veces: la segunda escribe en las mismas llaves (el bucket versionado conserva la version anterior 30 dias)
 aws lambda invoke --function-name indice-del-taco-dev-ingesta-banxico --payload '{"fecha_ingesta":"2026-11-16"}' --cli-binary-format raw-in-base64-out out.json
 ```
+
+### Silver, gold y Athena (stacks `indice-taco-pipeline` e `indice-taco-athena`)
+
+```bash
+python empaquetar_lambda.py pipeline                       # imprime la llave sugerida, p. ej. lambdas/pipeline-25f8aec0.zip
+aws s3 cp build/pipeline.zip s3://indice-del-taco-dev-artefactos-<ID-DE-CUENTA>/lambdas/pipeline-<hash>.zip
+aws cloudformation deploy --template-file 05-lambdas-silver-gold.yaml --stack-name indice-taco-pipeline \
+  --parameter-overrides $P CodeBucket=indice-del-taco-dev-artefactos-<ID-DE-CUENTA> CodeKey=lambdas/pipeline-<hash>.zip \
+  --capabilities CAPABILITY_NAMED_IAM
+aws cloudformation deploy --template-file 06-glue-athena.yaml --stack-name indice-taco-athena --parameter-overrides $P
+
+# Datos de entrada en bronze (sinteticos) y ejecucion
+aws s3 cp ../data/sintetico/chat_proveedor.txt "s3://<bronze>/raw/chat/fecha_ingesta=AAAA-MM-DD/chat_proveedor.txt"
+aws s3 cp ../data/sintetico/receta.csv        "s3://<bronze>/raw/interno/fecha_ingesta=AAAA-MM-DD/receta.csv"
+aws lambda invoke --function-name indice-del-taco-dev-silver --payload '{"fecha_ingesta":"AAAA-MM-DD"}' --cli-binary-format raw-in-base64-out out.json
+aws lambda invoke --function-name indice-del-taco-dev-gold   --payload '{}' --cli-binary-format raw-in-base64-out out.json
+```
+
+La capa de pandas (`PandasLayerArn`) es la administrada AWS SDK for pandas para Python 3.13 y depende de la region (version 17 en `us-east-2`).
+Las consultas estan en `sql/` y se ejecutan en el workgroup `indice-del-taco-dev` (tope de 100 MB por consulta).
 
 ## Parámetros
 

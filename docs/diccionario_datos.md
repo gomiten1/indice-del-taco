@@ -20,8 +20,8 @@ Ruta: `s3://<bucket-bronze>/raw/<fuente>/<detalle>/fecha_ingesta=AAAA-MM-DD/<arc
 | :---- | :---- | :---- |
 | Banxico SIE | `raw/banxico/SP1/fecha_ingesta=.../SP1_datos.json` y `SP1_metadatos.json` | Desplegada y probada (`src/ingesta/banxico.py`) |
 | PROFECO CSV | `raw/profeco/csv/bMM_AAAA_qN.csv` | Carga manual (403 desde clientes automáticos) |
-| Chat del proveedor | `raw/chat/fecha_ingesta=.../chat_proveedor.txt` | Sintético (`datos_sinteticos/`) |
-| Receta y ventas | `raw/interno/receta.csv`, `raw/interno/ventas_diarias.csv` | Sintético |
+| Chat del proveedor | `raw/chat/fecha_ingesta=.../chat_proveedor.txt` | Sintético (`datos_sinteticos/`); cargado en bronze |
+| Receta | `raw/interno/fecha_ingesta=.../receta.csv` | Sintético; cargado en bronze. Las ventas no se usan por ahora |
 | INEGI | `raw/inegi/...` | Pendiente (falta el ID del INPC) |
 
 ## Silver (Parquet limpio)
@@ -137,7 +137,7 @@ Llave: (`anio`, `semana_iso`, `insumo`, `fuente`). Las filas con `fuente = 'prov
 | `fuente` | string | `proveedor`, `menudeo`, `mayoreo` |
 | `precio_kg` | decimal(10,2) | |
 | `n_observaciones` | int | Cuántos precios se usaron |
-| `estadistico` | string | `mediana` ([ADR 0003](adr/0003-estadistico-precio-semanal.md)) |
+| `estadistico` | string | `mediana` para el mercado ([ADR 0003](adr/0003-estadistico-precio-semanal.md)); `ultimo_vigente` para el proveedor |
 
 ### `comparativo_proveedor` (P2)
 Llave: (`anio`, `semana_iso`, `insumo`).
@@ -151,11 +151,12 @@ Llave: (`anio`, `semana_iso`, `insumo`).
 | `aproximado` | boolean | Verdadero si el insumo usa un proxy | Sí |
 
 ### `comparativo_inflacion` (P4)
-Llave: (`anio`, `mes`). Mensual por la frecuencia del INPC. **Pública.**
+Llave: (`anio`, `mes`, `tipo_taco`). Mensual por la frecuencia del INPC. **Pública.**
 
 | Columna | Tipo | Descripción |
 | :---- | :---- | :---- |
 | `anio`, `mes` | int | |
+| `tipo_taco` | string | `suadero` o `pastor` (versión base, sin merma) |
 | `indice_taco_base100` | decimal(8,2) | Índice del taco, mensualizado |
 | `inpc_general_base100` | decimal(8,2) | Misma base 100 |
 | `inpc_alimentos_base100` | decimal(8,2) | Nulo hasta resolver la serie de alimentos (tarea 1.7) |

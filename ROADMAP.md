@@ -58,11 +58,11 @@ Sin esto el equipo no puede trabajar en paralelo.
 
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
-| 2.1 | ✅ Silver del chat hecho y probado en local (falta empaquetarlo como Lambda y PROFECO). Lambda de limpieza: tipos, catálogo de insumos, normalización de unidades a kg/pieza, filtro CDMX | D | Parquet particionado por año/semana |
+| 2.1 | ✅ Silver del chat, el INPC y la receta, desplegado como Lambda (falta PROFECO). Lambda de limpieza: tipos, catálogo de insumos, normalización de unidades a kg/pieza, filtro CDMX | D | Parquet particionado por año/semana |
 | 2.2 | Resolver duplicados de PROFECO (hay ~11k combinaciones repetidas por quincena) | D | Regla documentada y probada |
 | 2.2b | Leer los CSV de PROFECO (223 MB) por partes, filtrando CDMX y columnas, sin exceder memoria ni tiempo de Lambda | D | Decisión en ADR; prueba con un archivo real |
 | 2.3 | ✅ Hechas para el chat (umbral de cuarentena 10 %, variación 25 %). Reglas de calidad: precio > 0, fecha válida, unidad reconocida, variación semanal razonable, esquema esperado, completitud; umbral de cuarentena que dispara alerta | D | Cuarentena trazable, pruebas unitarias |
-| 2.4 | Glue Data Catalog (DDL manual) y consultas en Athena | D | Tablas consultables en `sql/` |
+| 2.4 | ✅ Glue Data Catalog (DDL manual, partition projection) y Athena desplegados (`infra/06`) | D | Tablas consultables en `sql/` |
 | 2.5 | Comparación de bytes escaneados CSV vs. Parquet (criterio de E3) | D | Número en el README |
 
 ### Fase 3 · Gold e Índice del Taco (20 a 23/11)
@@ -72,11 +72,11 @@ Arranca en paralelo con la Fase 2 usando datos sintéticos y los contratos de la
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
 | 3.0 | ✅ Costeo de la salsa y merma decididos (ADR 0005 y 0008) | D | ADR 0005 |
-| 3.1 | `costo_taco_semanal` e Índice base 100: `Σ cantidad_por_taco × precio_unitario` | D | Tabla gold, pruebas del cálculo |
+| 3.1 | ✅ `costo_taco_semanal` e Índice base 100: `Σ cantidad_por_taco × precio_unitario` | D | Tabla gold, pruebas del cálculo |
 | 3.2 | `precio_insumo_semanal` y `comparativo_proveedor` (proveedor vs. menudeo y mayoreo PROFECO). Si falta el dato público de un insumo, se muestra "sin dato" | D | Tablas gold, marcadas como comparación aproximada |
-| 3.3 | `comparativo_inflacion` (índice vs. inflación general y de alimentos, misma base 100; frecuencia mensual) | D | Tabla gold |
+| 3.3 | ✅ (falta la serie de alimentos) `comparativo_inflacion` (índice vs. inflación general y de alimentos, misma base 100; frecuencia mensual) | D | Tabla gold |
 | 3.4 | `contribucion_insumo` (top 3 insumos del último trimestre) | D | Tabla gold |
-| 3.5 | Una consulta SQL por pregunta (P1 a P4), con su interpretación | D | `sql/p1.sql` a `p4.sql` |
+| 3.5 | ✅ P1 y P4 en `sql/` (faltan P2 y P3, necesitan PROFECO). Una consulta SQL por pregunta (P1 a P4), con su interpretación | D | `sql/p1.sql` a `p4.sql` |
 | 3.6 | Recalcular una semana desde bronze y comprobar que da el mismo resultado | D | Prueba de reproducibilidad (N6) |
 | 3.7 | Sensibilidad con merma (ADR 0005) | S | Segunda versión del índice |
 

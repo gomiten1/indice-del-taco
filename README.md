@@ -2,7 +2,7 @@
 
 Pipeline de datos en AWS que calcula cada semana el costo de insumos de un taco de suadero y de pastor, lo compara contra el mercado y la inflación, y avisa por correo cuando algo falla. Pensado para La TaquerIA Opus y replicable en cualquier negocio de comida en México.
 
-> **Estado:** en construcción. Las secciones marcadas con [EN CONSTRUCCIÓN] se completan conforme avanzan los hitos (ver [Avance](#avance)).
+> **Estado:** en construcción. **Funciona de punta a punta en AWS** con datos sintéticos y el INPC de Banxico (bronze → silver → gold → Athena) para P1 y P4; faltan PROFECO (P2 y P3), la orquestación, las alertas y el dashboard. Las secciones marcadas con [EN CONSTRUCCIÓN] se completan conforme avanzan los hitos (ver [Avance](#avance)).
 
 ## El problema
 
@@ -129,7 +129,7 @@ PYTHONPATH=.:src .venv/bin/python -m transformacion.silver_chat --fecha-ingesta 
 │   └── costos.md           # [EN CONSTRUCCIÓN]
 ├── infra/                  # [EN CONSTRUCCIÓN] Plantillas de CloudFormation
 ├── src/                    # ingesta/ (parser, Banxico) y transformacion/ (silver del chat); [EN CONSTRUCCIÓN] PROFECO, gold
-├── sql/                    # [EN CONSTRUCCIÓN] DDL de Athena y consultas por pregunta
+├── sql/                    # Consultas de Athena por pregunta (P1 y P4; la DDL está en infra/06)
 ├── datos_sinteticos/       # Generador reproducible (semilla fija)
 ├── dashboard/              # [EN CONSTRUCCIÓN]
 ├── snapshot_gold/          # [EN CONSTRUCCIÓN] Copia de las tablas gold para el dashboard
