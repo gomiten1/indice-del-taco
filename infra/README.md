@@ -16,6 +16,7 @@ código real de ingesta (Banxico, PROFECO, INEGI) y las capas silver / gold.
 | `04-lambda-ingesta-banxico.yaml` | Lambda `python3.13` que descarga el INPC de Banxico a `raw/banxico/` de bronze. Rol con solo `s3:PutObject` en ese prefijo y `ssm:GetParameter` sobre su token. Código en `src/ingesta/banxico.py`. |
 | `05-lambdas-silver-gold.yaml` | Lambdas de silver y gold (un paquete, dos handlers) con roles de mínimo privilegio por bucket y la capa de pandas. |
 | `06-glue-athena.yaml` | Base de datos y tablas de Glue (DDL manual, partition projection), workgroup de Athena con tope de bytes y bucket de resultados. |
+| `07-orquestacion-alertas.yaml` | Lambda orquestadora, EventBridge Scheduler (lunes 6:00 CDMX), tema SNS con suscripción por correo y dos alarmas de CloudWatch. |
 
 ## Orden de despliegue
 
@@ -86,6 +87,23 @@ aws lambda invoke --function-name indice-del-taco-dev-gold   --payload '{}' --cl
 
 La capa de pandas (`PandasLayerArn`) es la administrada AWS SDK for pandas para Python 3.13 y depende de la region (version 17 en `us-east-2`).
 Las consultas estan en `sql/` y se ejecutan en el workgroup `indice-del-taco-dev` (tope de 100 MB por consulta).
+
+### Orquestación y alertas (stack `indice-taco-orquestacion`)
+
+```bash
+# AlertEmail NO va en el repo: se pasa al desplegar. SNS manda un correo de confirmacion que hay que aceptar.
+aws cloudformation deploy --template-file 07-orquestacion-alertas.yaml --stack-name indice-taco-orquestacion \
+  --parameter-overrides $P AlertEmail=<tu-correo> CodeBucket=indice-del-taco-dev-artefactos-<ID-DE-CUENTA> CodeKey=lambdas/pipeline-<hash>.zip \
+  --capabilities CAPABILITY_NAMED_IAM
+
+# Corrida manual y falla simulada (etapa: ingesta, silver o gold) para probar que el correo llega
+aws lambda invoke --function-name indice-del-taco-dev-orquestador --payload '{}' --cli-binary-format raw-in-base64-out out.json
+aws lambda invoke --function-name indice-del-taco-dev-orquestador --payload '{"simular_falla":"silver"}' --cli-binary-format raw-in-base64-out out.json
+```
+
+EventBridge Scheduler corre el orquestador **cada lunes a las 6:00 (hora de CDMX)**. Alertas: el orquestador avisa en cuanto una
+etapa falla o silver reporta datos sospechosos/atrasados; una alarma avisa si el orquestador mismo se cae, y otra si pasan 7 dias
+sin ejecutarse. Cada corrida queda en la tabla `registro_ejecuciones` (consultable en Athena).
 
 ## Parámetros
 

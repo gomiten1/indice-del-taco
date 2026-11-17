@@ -2,7 +2,7 @@
 
 Pipeline de datos en AWS que calcula cada semana el costo de insumos de un taco de suadero y de pastor, lo compara contra el mercado y la inflación, y avisa por correo cuando algo falla. Pensado para La TaquerIA Opus y replicable en cualquier negocio de comida en México.
 
-> **Estado:** en construcción. **Funciona de punta a punta en AWS** con datos sintéticos y el INPC de Banxico (bronze → silver → gold → Athena) para P1 y P4; faltan PROFECO (P2 y P3), la orquestación, las alertas y el dashboard. Las secciones marcadas con [EN CONSTRUCCIÓN] se completan conforme avanzan los hitos (ver [Avance](#avance)).
+> **Estado:** en construcción. **Funciona de punta a punta en AWS** con datos sintéticos y el INPC de Banxico (bronze → silver → gold → Athena) para P1 y P4; se ejecuta sola cada lunes 6:00 (CDMX) y registra cada corrida; faltan PROFECO (P2 y P3), probar las alertas de punta a punta y el dashboard. Las secciones marcadas con [EN CONSTRUCCIÓN] se completan conforme avanzan los hitos (ver [Avance](#avance)).
 
 ## El problema
 

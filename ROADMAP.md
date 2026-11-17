@@ -84,8 +84,8 @@ Arranca en paralelo con la Fase 2 usando datos sintéticos y los contratos de la
 
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
-| 4.1 | EventBridge Scheduler semanal que dispara el pipeline completo en orden, con corte el domingo 23:59 y resultado listo antes del lunes 9:00 (N1) | D | Al menos **dos** corridas completas sin intervención (durante las pruebas se dispara más seguido que cada semana) |
-| 4.2 | Alarmas de CloudWatch y SNS por correo ante fallas **y datos sospechosos** (variación semanal extrema, cuarentena sobre el umbral); registro de ejecuciones (fecha, fuente, leídos, aceptados, rechazados, duración) | D | Tabla o log de ejecuciones |
+| 4.1 | ✅ Desplegado (lunes 6:00 CDMX); falta ver dos corridas semanales automáticas. EventBridge Scheduler semanal que dispara el pipeline completo en orden, con corte el domingo 23:59 y resultado listo antes del lunes 9:00 (N1) | D | Al menos **dos** corridas completas sin intervención (durante las pruebas se dispara más seguido que cada semana) |
+| 4.2 | ✅ Desplegado. Alarmas de CloudWatch y SNS por correo ante fallas **y datos sospechosos** (variación semanal extrema, cuarentena sobre el umbral); registro de ejecuciones (fecha, fuente, leídos, aceptados, rechazados, duración) | D | Tabla o log de ejecuciones |
 | 4.3 | **Falla simulada a propósito** y correo recibido en ≤60 min | D | Captura del correo (N5) |
 | 4.4 | Unificar las plantillas CloudFormation; probar destruir y volver a desplegar | D | Grabación (N6, E6) |
 | 4.5 | Runbook por alerta | D | `docs/runbook.md` |

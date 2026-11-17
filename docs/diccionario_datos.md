@@ -98,7 +98,7 @@ Todo lo que no pasa las reglas de calidad. Se guarda en su propio bucket.
 | `ejecucion_id`, `fecha_ingesta` | string, date | |
 
 ### `registro_ejecuciones`
-Una fila por etapa y fuente en cada corrida (E5).
+Una fila por etapa y fuente en cada corrida (E5). La escribe el orquestador en `registro_ejecuciones/<ejecucion_id>.parquet` del bucket silver; `estado = error` se registra cuando una etapa falla y detiene la corrida.
 
 | Columna | Tipo | Descripción |
 | :---- | :---- | :---- |
