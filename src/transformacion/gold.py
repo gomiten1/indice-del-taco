@@ -1,0 +1,145 @@
+"""Gold: costo por taco e Índice del Taco (P1), precio semanal por insumo y comparación con la inflación (P4).
+
+Contrato: docs/diccionario_datos.md. Decisiones: ADR 0003 (precio del proveedor = último precio vigente de la
+semana), 0005 (la salsa no entra; el costo cuenta solo los insumos con dato), 0008 (merma solo en pastor, como
+versión aparte) y 0009 (semana base = primera semana con todos los insumos de la receta).
+
+Lógica pura sobre tablas de pyarrow: no sabe de disco ni de S3. Quedan pendientes para cuando haya PROFECO:
+`comparativo_proveedor` (P2) y `contribucion_insumo` (P3).
+"""
+from __future__ import annotations
+
+from datetime import date, timedelta
+from decimal import ROUND_HALF_UP, Decimal
+
+import pyarrow as pa
+
+MERMA_PASTOR = Decimal("0.12")  # ADR 0008: parte del trompo que no se vende (≈12 %)
+
+ESQUEMA_COSTO = pa.schema([
+    ("anio", pa.int32()), ("semana_iso", pa.int32()), ("semana_inicio", pa.date32()), ("tipo_taco", pa.string()),
+    ("costo_taco_mxn", pa.decimal128(8, 2)), ("indice_base100", pa.decimal128(8, 2)), ("semana_base", pa.date32()),
+    ("incluye_merma", pa.bool_()), ("insumos_con_dato", pa.int32())])
+ESQUEMA_PRECIO_INSUMO = pa.schema([
+    ("anio", pa.int32()), ("semana_iso", pa.int32()), ("insumo", pa.string()), ("fuente", pa.string()),
+    ("precio_kg", pa.decimal128(10, 2)), ("n_observaciones", pa.int32()), ("estadistico", pa.string())])
+ESQUEMA_INFLACION = pa.schema([
+    ("anio", pa.int32()), ("mes", pa.int32()), ("tipo_taco", pa.string()),
+    ("indice_taco_base100", pa.decimal128(8, 2)), ("inpc_general_base100", pa.decimal128(8, 2)),
+    ("inpc_alimentos_base100", pa.decimal128(8, 2)), ("base_mes", pa.date32()), ("brecha_pp", pa.decimal128(8, 2))])
+TABLAS = {"costo_taco_semanal": ESQUEMA_COSTO, "precio_insumo_semanal": ESQUEMA_PRECIO_INSUMO,
+          "comparativo_inflacion": ESQUEMA_INFLACION}
+
+
+def _q(x: Decimal) -> Decimal:
+    return x.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _lunes(d: date) -> date:
+    return d - timedelta(days=d.weekday())
+
+
+def _mes_de(lunes: date) -> tuple[int, int]:
+    j = lunes + timedelta(days=3)  # el jueves decide a qué mes pertenece la semana (convención ISO)
+    return j.year, j.month
+
+
+def _precios_semanales(precios: pa.Table):
+    """(lista de lunes, {(producto, lunes): (último precio vigente al cierre de la semana, n de avisos esa semana)})."""
+    eventos: dict[str, list] = {}
+    for f in sorted(precios.to_pylist(), key=lambda f: f["fecha_hora"]):
+        if f["unidad"] == "kg":
+            eventos.setdefault(f["producto"], []).append((f["fecha_hora"].date(), f["precio_unitario"]))
+    if not eventos:
+        return [], {}
+    primera = _lunes(min(e[0][0] for e in eventos.values()))
+    ultima = _lunes(max(e[-1][0] for e in eventos.values()))
+    semanas = [primera + timedelta(weeks=i) for i in range((ultima - primera).days // 7 + 1)]
+    por_semana: dict[tuple[str, date], tuple[Decimal, int]] = {}
+    for producto, evs in eventos.items():
+        vigente, i = None, 0
+        for lunes in semanas:
+            n = 0
+            while i < len(evs) and evs[i][0] < lunes + timedelta(days=7):
+                vigente, i, n = evs[i][1], i + 1, n + 1
+            if vigente is not None:
+                por_semana[(producto, lunes)] = (vigente, n)
+    return semanas, por_semana
+
+
+def calcular_gold(precios: pa.Table, receta: pa.Table, inpc: pa.Table | None, semana_base: date | None = None,
+                  merma_pastor: Decimal = MERMA_PASTOR) -> dict[str, pa.Table]:
+    semanas, por_semana = _precios_semanales(precios)
+
+    filas_insumo = []
+    for (producto, lunes), (precio, n) in sorted(por_semana.items()):
+        iso = lunes.isocalendar()
+        filas_insumo.append({"anio": iso.year, "semana_iso": iso.week, "insumo": producto, "fuente": "proveedor",
+                             "precio_kg": _q(precio), "n_observaciones": n, "estadistico": "ultimo_vigente"})
+
+    recetas: dict[str, list[tuple[str, int]]] = {}
+    for r in receta.to_pylist():
+        recetas.setdefault(r["tipo_taco"], []).append((r["insumo"], r["gramos_por_taco"]))
+
+    filas_costo, indices = [], {}  # indices[(tipo_taco, lunes)] = índice sin redondear (versión base, sin merma)
+    base_de: dict[str, date | None] = {}
+    for tipo, lineas in sorted(recetas.items()):
+        for con_merma in ([False, True] if tipo == "pastor" else [False]):
+            semanas_tipo = []
+            for lunes in semanas:
+                costo, con_dato = Decimal(0), 0
+                for insumo, gramos in lineas:
+                    p = por_semana.get((insumo, lunes))
+                    if p is None:
+                        continue
+                    linea = Decimal(gramos) / Decimal(1000) * p[0]
+                    if con_merma and insumo == "pastor":
+                        linea = linea / (1 - merma_pastor)
+                    costo, con_dato = costo + linea, con_dato + 1
+                if con_dato:
+                    semanas_tipo.append((lunes, costo, con_dato))
+            completas = [(l, c) for l, c, n in semanas_tipo if n == len(lineas)]
+            base = semana_base or (completas[0][0] if completas else None)
+            costo_base = next((c for l, c in completas if l == base), None)
+            if not con_merma:
+                base_de[tipo] = base if costo_base is not None else None
+            for lunes, costo, con_dato in semanas_tipo:
+                indice = None
+                if costo_base is not None and con_dato == len(lineas) and lunes >= base:
+                    indice = costo / costo_base * 100
+                    if not con_merma:
+                        indices[(tipo, lunes)] = indice
+                iso = lunes.isocalendar()
+                filas_costo.append({
+                    "anio": iso.year, "semana_iso": iso.week, "semana_inicio": lunes, "tipo_taco": tipo,
+                    "costo_taco_mxn": _q(costo), "indice_base100": _q(indice) if indice is not None else None,
+                    "semana_base": base if costo_base is not None else None, "incluye_merma": con_merma,
+                    "insumos_con_dato": con_dato})
+
+    inpc_mes = {}
+    if inpc is not None:
+        inpc_mes = {(f["fecha"].year, f["fecha"].month): f["indice"] for f in inpc.to_pylist() if f["serie_id"] == "SP1"}
+    filas_inflacion = []
+    for tipo in sorted(recetas):
+        base = base_de.get(tipo)
+        if base is None:
+            continue
+        por_mes: dict[tuple[int, int], list[Decimal]] = {}
+        for (t, lunes), idx in sorted(indices.items()):
+            if t == tipo:
+                por_mes.setdefault(_mes_de(lunes), []).append(idx)
+        media = {m: sum(v) / len(v) for m, v in por_mes.items()}
+        mes_base = _mes_de(base)
+        for (anio, mes), m in sorted(media.items()):
+            indice = m / media[mes_base] * 100
+            inpc_idx = None
+            if (anio, mes) in inpc_mes and mes_base in inpc_mes:
+                inpc_idx = inpc_mes[(anio, mes)] / inpc_mes[mes_base] * 100
+            filas_inflacion.append({
+                "anio": anio, "mes": mes, "tipo_taco": tipo, "indice_taco_base100": _q(indice),
+                "inpc_general_base100": _q(inpc_idx) if inpc_idx is not None else None, "inpc_alimentos_base100": None,
+                "base_mes": date(*mes_base, 1), "brecha_pp": _q(indice - inpc_idx) if inpc_idx is not None else None})
+
+    return {"costo_taco_semanal": pa.Table.from_pylist(filas_costo, schema=ESQUEMA_COSTO),
+            "precio_insumo_semanal": pa.Table.from_pylist(filas_insumo, schema=ESQUEMA_PRECIO_INSUMO),
+            "comparativo_inflacion": pa.Table.from_pylist(filas_inflacion, schema=ESQUEMA_INFLACION)}

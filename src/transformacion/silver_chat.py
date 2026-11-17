@@ -20,12 +20,13 @@ from decimal import Decimal
 from pathlib import Path
 
 import pyarrow as pa
-import pyarrow.parquet as pq
 
 from ingesta.parser_chat import parsear_chat
+from transformacion import parquet
+from transformacion.almacen import AlmacenLocal
+from transformacion.comun import ESQUEMA_CUARENTENA, UMBRAL_CUARENTENA, armar_resumen, fila_cuarentena  # noqa: F401
 
 UMBRAL_VARIACION = Decimal("0.25")
-UMBRAL_CUARENTENA = 0.10
 UNIDADES_SILVER = {"kg", "pieza"}
 FUENTE = "chat"
 TABLA_SILVER = "silver_precio_proveedor"
@@ -41,16 +42,6 @@ ESQUEMA_PRECIOS = pa.schema([
     ("sospechoso", pa.bool_()),
     ("archivo_origen", pa.string()),
     ("linea", pa.int32()),
-    ("fecha_ingesta", pa.date32()),
-])
-ESQUEMA_CUARENTENA = pa.schema([
-    ("fuente", pa.string()),
-    ("regla", pa.string()),
-    ("motivo", pa.string()),
-    ("registro_original", pa.string()),
-    ("archivo_origen", pa.string()),
-    ("linea", pa.int32()),
-    ("ejecucion_id", pa.string()),
     ("fecha_ingesta", pa.date32()),
 ])
 COLUMNAS_DE_RUTA = ["anio", "semana_iso"]  # van en la ruta (Glue/Athena), no dentro del archivo
@@ -69,10 +60,8 @@ def procesar_chat(texto: str, archivo_origen: str, fecha_ingesta: date, ejecucio
     parseo = parsear_chat(texto)
     limite = datetime.combine(fecha_ingesta, time.max)
 
-    cuarentena = [
-        {"fuente": FUENTE, "regla": r.motivo, "motivo": r.detalle, "registro_original": r.texto,
-         "archivo_origen": archivo_origen, "linea": r.linea, "ejecucion_id": ejecucion_id, "fecha_ingesta": fecha_ingesta}
-        for r in parseo.rechazos]
+    cuarentena = [fila_cuarentena(FUENTE, r.motivo, r.detalle, r.texto, archivo_origen, r.linea, ejecucion_id, fecha_ingesta)
+                  for r in parseo.rechazos]
 
     aceptados = []
     for p in parseo.precios:
@@ -82,10 +71,8 @@ def procesar_chat(texto: str, archivo_origen: str, fecha_ingesta: date, ejecucio
         elif p.unidad not in UNIDADES_SILVER:
             regla, motivo = "unidad_no_soportada", f"{p.producto}: la unidad '{p.unidad}' no se puede convertir a kg o pieza"
         if regla:
-            cuarentena.append({
-                "fuente": FUENTE, "regla": regla, "motivo": motivo,
-                "registro_original": f"{p.fecha:%Y-%m-%d %H:%M} {p.producto} {p.precio} {p.unidad}",
-                "archivo_origen": archivo_origen, "linea": p.linea, "ejecucion_id": ejecucion_id, "fecha_ingesta": fecha_ingesta})
+            cuarentena.append(fila_cuarentena(FUENTE, regla, motivo, f"{p.fecha:%Y-%m-%d %H:%M} {p.producto} {p.precio} {p.unidad}",
+                                              archivo_origen, p.linea, ejecucion_id, fecha_ingesta))
         else:
             aceptados.append(p)
 
@@ -102,48 +89,25 @@ def procesar_chat(texto: str, archivo_origen: str, fecha_ingesta: date, ejecucio
             "archivo_origen": archivo_origen, "linea": p.linea, "fecha_ingesta": fecha_ingesta})
 
     leidos = len(parseo.precios) + len(parseo.rechazos)
-    proporcion = len(cuarentena) / leidos if leidos else 0.0
-    resumen = {"leidos": leidos, "aceptados": len(filas), "rechazados": len(cuarentena),
-               "sospechosos": sum(f["sospechoso"] for f in filas),
-               "proporcion_cuarentena": proporcion, "alerta_cuarentena": proporcion > UMBRAL_CUARENTENA}
+    resumen = armar_resumen(leidos, len(filas), len(cuarentena), sum(f["sospechoso"] for f in filas))
     return ResultadoSilver(pa.Table.from_pylist(filas, schema=ESQUEMA_PRECIOS),
                            pa.Table.from_pylist(cuarentena, schema=ESQUEMA_CUARENTENA),
                            resumen, archivo_origen, fecha_ingesta)
 
 
-def particiones(precios: pa.Table) -> dict[str, pa.Table]:
-    """Ruta relativa de cada partición (`anio=2026/semana_iso=03`) -> sus filas, sin las columnas de la ruta."""
-    grupos: dict[tuple[int, int], list[int]] = {}
-    for i, (a, s) in enumerate(zip(precios["anio"].to_pylist(), precios["semana_iso"].to_pylist())):
-        grupos.setdefault((a, s), []).append(i)
-    return {f"anio={a}/semana_iso={s:02d}": precios.take(idx).drop_columns(COLUMNAS_DE_RUTA)
-            for (a, s), idx in sorted(grupos.items())}
+def escribir(resultado: ResultadoSilver, silver, cuarentena) -> list[str]:
+    """Escribe silver y cuarentena en los almacenes dados (disco o S3). Idempotente: el mismo chat deja los mismos
+    archivos y el reproceso reemplaza (también borra las particiones que el chat nuevo ya no trae)."""
+    rutas = parquet.escribir_particionada(silver, TABLA_SILVER, resultado.precios, COLUMNAS_DE_RUTA,
+                                          lambda anio, semana: f"anio={anio}/semana_iso={semana:02d}")
+    rutas.append(parquet.escribir_cuarentena(cuarentena, FUENTE, resultado.fecha_ingesta, resultado.archivo_origen,
+                                             resultado.cuarentena))
+    return rutas
 
 
-def _escribir(tabla: pa.Table, ruta: Path) -> None:
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    pq.write_table(tabla, ruta, compression="snappy", coerce_timestamps="ms")
-
-
-def escribir_local(resultado: ResultadoSilver, raiz: Path) -> list[Path]:
-    """Escribe silver y cuarentena. Idempotente: el mismo chat deja los mismos archivos, y el reproceso
-    reemplaza (también borra las particiones que el chat nuevo ya no trae)."""
+def escribir_local(resultado: ResultadoSilver, raiz) -> list[str]:
     raiz = Path(raiz)
-    tabla_dir = raiz / "silver" / TABLA_SILVER
-    nuevas = {tabla_dir / ruta / "datos.parquet": t for ruta, t in particiones(resultado.precios).items()}
-    for ruta, t in nuevas.items():
-        _escribir(t, ruta)
-    if tabla_dir.exists():
-        for viejo in tabla_dir.rglob("datos.parquet"):
-            if viejo not in nuevas:
-                viejo.unlink()
-        for d in sorted((p for p in tabla_dir.rglob("*") if p.is_dir()), reverse=True):
-            if not any(d.iterdir()):
-                d.rmdir()
-    ruta_q = (raiz / "cuarentena" / f"fuente={FUENTE}" / f"fecha_ingesta={resultado.fecha_ingesta}"
-              / f"{Path(resultado.archivo_origen).stem}.parquet")
-    _escribir(resultado.cuarentena, ruta_q)  # siempre se escribe (aunque esté vacía) para no dejar cuarentena vieja
-    return sorted(nuevas) + [ruta_q]
+    return escribir(resultado, AlmacenLocal(raiz / "silver"), AlmacenLocal(raiz / "cuarentena"))
 
 
 if __name__ == "__main__":
