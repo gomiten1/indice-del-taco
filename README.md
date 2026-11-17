@@ -2,7 +2,7 @@
 
 Pipeline de datos en AWS que calcula cada semana el costo de insumos de un taco de suadero y de pastor, lo compara contra el mercado y la inflación, y avisa por correo cuando algo falla. Pensado para La TaquerIA Opus y replicable en cualquier negocio de comida en México.
 
-> **Estado:** en construcción. Las secciones marcadas con [EN CONSTRUCCIÓN] se completan conforme avanzan los hitos (ver [Avance](#avance)).
+> **Estado:** en construcción. **Funciona de punta a punta en AWS** con datos sintéticos y el INPC de Banxico (bronze → silver → gold → Athena) para P1 y P4; se ejecuta sola cada lunes 6:00 (CDMX) y registra cada corrida; faltan PROFECO (P2 y P3), probar las alertas de punta a punta y el dashboard. Las secciones marcadas con [EN CONSTRUCCIÓN] se completan conforme avanzan los hitos (ver [Avance](#avance)).
 
 ## El problema
 
@@ -87,6 +87,12 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 
 Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del chat vive en `src/ingesta/parser_chat.py`.
 
+Para generar silver y cuarentena en local (Parquet particionado por año y semana ISO):
+
+```bash
+PYTHONPATH=.:src .venv/bin/python -m transformacion.silver_chat --fecha-ingesta 2026-11-16   # lee data/sintetico, escribe data/lake
+```
+
 ## Cómo desplegarlo
 
 [EN CONSTRUCCIÓN] *La plantilla `infra/template.yaml` todavía no existe; estos son los pasos previstos. Se confirmarán cuando esté lista (H7).*
@@ -118,12 +124,12 @@ Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del
 │   ├── adr/                # Registros de decisiones de arquitectura
 │   ├── img/                # Diagrama de arquitectura (PNG y JSON de Diagramon)
 │   ├── fuentes.md          # Catálogo y validación de las fuentes de datos
-│   ├── diccionario_datos.md # [EN CONSTRUCCIÓN]
+│   ├── diccionario_datos.md # Contrato de silver y gold (v0)
 │   ├── runbook.md          # [EN CONSTRUCCIÓN]
 │   └── costos.md           # [EN CONSTRUCCIÓN]
 ├── infra/                  # [EN CONSTRUCCIÓN] Plantillas de CloudFormation
-├── src/                    # ingesta/parser_chat.py; [EN CONSTRUCCIÓN] transformacion, calidad y gold
-├── sql/                    # [EN CONSTRUCCIÓN] DDL de Athena y consultas por pregunta
+├── src/                    # ingesta/ (parser, Banxico) y transformacion/ (silver del chat); [EN CONSTRUCCIÓN] PROFECO, gold
+├── sql/                    # Consultas de Athena por pregunta (P1 y P4; la DDL está en infra/06)
 ├── datos_sinteticos/       # Generador reproducible (semilla fija)
 ├── dashboard/              # [EN CONSTRUCCIÓN]
 ├── snapshot_gold/          # [EN CONSTRUCCIÓN] Copia de las tablas gold para el dashboard
@@ -139,7 +145,10 @@ Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del
 - [SOW](docs/consultoria/sow.md): alcance, entregables, hitos y presupuesto.
 - [Aclaraciones](docs/consultoria/aclaraciones.md): contradicciones encontradas y preguntas pendientes.
 - [Fuentes de datos](docs/fuentes.md): validación de cada fuente.
+- [Diccionario de datos](docs/diccionario_datos.md) (v0)
 - [ADR 0001: Alcance](docs/adr/0001-alcance.md)
+- [ADR 0010: cuenta y región de AWS](docs/adr/0010-cuenta-aws-y-region.md)
+- ADR [0003 estadístico](docs/adr/0003-estadistico-precio-semanal.md), [0005 salsa](docs/adr/0005-salsa.md), [0008 merma](docs/adr/0008-merma.md), [0009 semana base](docs/adr/0009-semana-base-indice.md)
 - [ADR 0007: Datos sintéticos](docs/adr/0007-datos-sinteticos-reconstruccion.md)
 
 ## Avance

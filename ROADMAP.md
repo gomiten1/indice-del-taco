@@ -32,10 +32,10 @@ Sin esto el equipo no puede trabajar en paralelo.
 
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
-| 0.1 | Verificar qué hay desplegado en AWS (stacks `indice-taco-bronze` y `indice-taco-extract`) | D | Estado anotado en `infra/README.md` |
+| 0.1 | ✅ Cuenta vacía al 16/11; desplegados bronze, lake, artefactos y Banxico (ver ADR 0010). Verificar qué hay desplegado en AWS | D | Estado anotado en `infra/README.md` |
 | 0.2 | MFA en root, un usuario IAM por integrante, Budgets al 50% y 80% | D | Captura de la alarma activa |
-| 0.3 | Congelar los **contratos de datos**: esquema de silver y de las 5 tablas gold (columnas y tipos). La receta y los precios de proveedor son **datos o configuración**, no valores fijos en el código (requisito de N8) | D | `docs/diccionario_datos.md` v0 |
-| 0.4 | Decidir y escribir ADRs críticos: ingesta híbrida de PROFECO, descarte de SNIIM, frecuencia por fuente, proxies de pastor y suadero, estadístico semanal y semana base (ADR 0003), capas, Parquet y catálogo (ADR 0002) | D | ADRs 0002, 0003 y los listados en `fuentes.md` |
+| 0.3 | ✅ (v0, falta revisión del equipo) Congelar los **contratos de datos**: esquema de silver y de las 5 tablas gold (columnas y tipos). La receta y los precios de proveedor son **datos o configuración**, no valores fijos en el código (requisito de N8) | D | `docs/diccionario_datos.md` v0 |
+| 0.4 | Decidir y escribir ADRs críticos: ingesta híbrida de PROFECO, descarte de SNIIM, frecuencia por fuente, proxies de pastor y suadero, capas, Parquet y catálogo (ADR 0002). Estadístico (0003), salsa (0005), merma (0008) y semana base (0009) ya decididos provisionalmente | D | ADRs 0002, 0003 y los listados en `fuentes.md` |
 | 0.5 | Reparto real de tareas por persona (los roles del SOW son nominales). Cada cambio entra por PR revisado por otra persona (SOW §7) | D | Tabla de responsables al final de este archivo |
 | 0.6 | Fijar receta (55 g de suadero, 50 g de pastor), catálogo de insumos y tabla de equivalencias de cortes con sus supuestos por escrito; enviar a la dueña las aclaraciones A1 a A6 | D | Receta e insumos en `datos_sinteticos/` y `aclaraciones.md` actualizado |
 | 0.7 | Conseguir el **brief del proyecto** (el SOW lo cita para el extracto del chat y el Anexo A de casos del parser; no está en el repo) | D | Brief disponible antes de la tarea 1.2 |
@@ -48,9 +48,9 @@ Sin esto el equipo no puede trabajar en paralelo.
 | :---- | :---- | :---- | :---- |
 | 1.1 | ✅ Generador sintético con semilla fija: chat del proveedor, receta, ventas (ene a sep 2026) con errores intencionales | D | `datos_sinteticos/`, misma semilla da mismos datos |
 | 1.2 | ✅ Parser del chat de WhatsApp (con y sin `$`, unidades implícitas, cambios relativos, correcciones, "lo demás igual") | D | `src/`, pruebas unitarias en verde |
-| 1.3 | Lambda de ingesta de Banxico a bronze: idempotente, con `fecha_ingesta`, token en Parameter Store | D | Doble ejecución sin duplicados, logs en CloudWatch |
+| 1.3 | ✅ Desplegada y probada en AWS (694 registros, doble ejecución sin llaves nuevas). Lambda de ingesta de Banxico a bronze: idempotente, con `fecha_ingesta`, token en Parameter Store | D | Doble ejecución sin duplicados, logs en CloudWatch |
 | 1.4 | PROFECO: script de carga manual a bronze (una quincena de CDMX como mínimo) | D | CSV en bronze, nombre `bMM_AAAA_qN` como llave |
-| 1.5 | Buckets silver, gold y cuarentena (plantillas hermanas de `01-s3-bucket.yaml`) | D | Stacks desplegados |
+| 1.5 | ✅ Desplegado (`infra/03`). Buckets silver, gold y cuarentena (plantillas hermanas de `01-s3-bucket.yaml`) | D | Stacks desplegados |
 | 1.6 | Lambda de ingesta de INEGI (falta el ID del INPC) | X | Banxico cubre el INPC general; se anota como limitación (cambio de alcance, ver "Pendientes de decidir") |
 | 1.7 | Encontrar y probar en Banxico (o INEGI) la serie de **inflación de alimentos**; N4 pide inflación general y de alimentos | D | Serie probada y anotada en `fuentes.md`; si no existe, limitación documentada |
 
@@ -58,11 +58,11 @@ Sin esto el equipo no puede trabajar en paralelo.
 
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
-| 2.1 | Lambda de limpieza: tipos, catálogo de insumos, normalización de unidades a kg/pieza, filtro CDMX | D | Parquet particionado por año/semana |
+| 2.1 | ✅ Silver del chat, el INPC y la receta, desplegado como Lambda (falta PROFECO). Lambda de limpieza: tipos, catálogo de insumos, normalización de unidades a kg/pieza, filtro CDMX | D | Parquet particionado por año/semana |
 | 2.2 | Resolver duplicados de PROFECO (hay ~11k combinaciones repetidas por quincena) | D | Regla documentada y probada |
 | 2.2b | Leer los CSV de PROFECO (223 MB) por partes, filtrando CDMX y columnas, sin exceder memoria ni tiempo de Lambda | D | Decisión en ADR; prueba con un archivo real |
-| 2.3 | Reglas de calidad: precio > 0, fecha válida, unidad reconocida, variación semanal razonable, esquema esperado, completitud; umbral de cuarentena que dispara alerta | D | Cuarentena trazable, pruebas unitarias |
-| 2.4 | Glue Data Catalog (DDL manual) y consultas en Athena | D | Tablas consultables en `sql/` |
+| 2.3 | ✅ Hechas para el chat (umbral de cuarentena 10 %, variación 25 %). Reglas de calidad: precio > 0, fecha válida, unidad reconocida, variación semanal razonable, esquema esperado, completitud; umbral de cuarentena que dispara alerta | D | Cuarentena trazable, pruebas unitarias |
+| 2.4 | ✅ Glue Data Catalog (DDL manual, partition projection) y Athena desplegados (`infra/06`) | D | Tablas consultables en `sql/` |
 | 2.5 | Comparación de bytes escaneados CSV vs. Parquet (criterio de E3) | D | Número en el README |
 
 ### Fase 3 · Gold e Índice del Taco (20 a 23/11)
@@ -71,12 +71,12 @@ Arranca en paralelo con la Fase 2 usando datos sintéticos y los contratos de la
 
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
-| 3.0 | Decidir el costeo de la salsa y dejar escrito el tratamiento de la merma (ADR 0005); sin esto el índice no se puede calcular | D | ADR 0005 |
-| 3.1 | `costo_taco_semanal` e Índice base 100: `Σ cantidad_por_taco × precio_unitario` | D | Tabla gold, pruebas del cálculo |
+| 3.0 | ✅ Costeo de la salsa y merma decididos (ADR 0005 y 0008) | D | ADR 0005 |
+| 3.1 | ✅ `costo_taco_semanal` e Índice base 100: `Σ cantidad_por_taco × precio_unitario` | D | Tabla gold, pruebas del cálculo |
 | 3.2 | `precio_insumo_semanal` y `comparativo_proveedor` (proveedor vs. menudeo y mayoreo PROFECO). Si falta el dato público de un insumo, se muestra "sin dato" | D | Tablas gold, marcadas como comparación aproximada |
-| 3.3 | `comparativo_inflacion` (índice vs. inflación general y de alimentos, misma base 100; frecuencia mensual) | D | Tabla gold |
+| 3.3 | ✅ (falta la serie de alimentos) `comparativo_inflacion` (índice vs. inflación general y de alimentos, misma base 100; frecuencia mensual) | D | Tabla gold |
 | 3.4 | `contribucion_insumo` (top 3 insumos del último trimestre) | D | Tabla gold |
-| 3.5 | Una consulta SQL por pregunta (P1 a P4), con su interpretación | D | `sql/p1.sql` a `p4.sql` |
+| 3.5 | ✅ P1 y P4 en `sql/` (faltan P2 y P3, necesitan PROFECO). Una consulta SQL por pregunta (P1 a P4), con su interpretación | D | `sql/p1.sql` a `p4.sql` |
 | 3.6 | Recalcular una semana desde bronze y comprobar que da el mismo resultado | D | Prueba de reproducibilidad (N6) |
 | 3.7 | Sensibilidad con merma (ADR 0005) | S | Segunda versión del índice |
 
@@ -84,8 +84,8 @@ Arranca en paralelo con la Fase 2 usando datos sintéticos y los contratos de la
 
 | # | Tarea | Prio | Resultado |
 | :---- | :---- | :---- | :---- |
-| 4.1 | EventBridge Scheduler semanal que dispara el pipeline completo en orden, con corte el domingo 23:59 y resultado listo antes del lunes 9:00 (N1) | D | Al menos **dos** corridas completas sin intervención (durante las pruebas se dispara más seguido que cada semana) |
-| 4.2 | Alarmas de CloudWatch y SNS por correo ante fallas **y datos sospechosos** (variación semanal extrema, cuarentena sobre el umbral); registro de ejecuciones (fecha, fuente, leídos, aceptados, rechazados, duración) | D | Tabla o log de ejecuciones |
+| 4.1 | ✅ Desplegado (lunes 6:00 CDMX); falta ver dos corridas semanales automáticas. EventBridge Scheduler semanal que dispara el pipeline completo en orden, con corte el domingo 23:59 y resultado listo antes del lunes 9:00 (N1) | D | Al menos **dos** corridas completas sin intervención (durante las pruebas se dispara más seguido que cada semana) |
+| 4.2 | ✅ Desplegado. Alarmas de CloudWatch y SNS por correo ante fallas **y datos sospechosos** (variación semanal extrema, cuarentena sobre el umbral); registro de ejecuciones (fecha, fuente, leídos, aceptados, rechazados, duración) | D | Tabla o log de ejecuciones |
 | 4.3 | **Falla simulada a propósito** y correo recibido en ≤60 min | D | Captura del correo (N5) |
 | 4.4 | Unificar las plantillas CloudFormation; probar destruir y volver a desplegar | D | Grabación (N6, E6) |
 | 4.5 | Runbook por alerta | D | `docs/runbook.md` |

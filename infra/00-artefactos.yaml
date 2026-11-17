@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Bucket S3 para los paquetes (.zip) de las Lambdas. Separado del data lake para no mezclar codigo con datos.
+
+Parameters:
+  ProjectName:
+    Type: String
+    AllowedPattern: "^[a-z0-9-]{3,30}$"
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+
+Resources:
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-${Environment}-artefactos-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: limpiar-versiones-antiguas
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+Outputs:
+  ArtifactsBucketName:
+    Value: !Ref ArtifactsBucket
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-artifacts-bucket-name"

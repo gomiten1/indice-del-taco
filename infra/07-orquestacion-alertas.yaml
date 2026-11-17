@@ -1,0 +1,218 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Orquestacion semanal (EventBridge Scheduler + Lambda orquestadora), alertas por correo (SNS) y alarmas de CloudWatch.
+
+Parameters:
+  ProjectName:
+    Type: String
+    AllowedPattern: "^[a-z0-9-]{3,30}$"
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+  AlertEmail:
+    Type: String
+    AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    Description: Correo que recibe las alertas. SNS manda un correo de confirmacion que hay que aceptar. No va en el repo
+  CodeBucket:
+    Type: String
+    Description: Bucket de artefactos donde esta el .zip del pipeline
+  CodeKey:
+    Type: String
+    Description: Llave del .zip del pipeline (el mismo de las Lambdas de silver y gold)
+  PandasLayerArn:
+    Type: String
+    Default: arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python313:17
+  ScheduleExpression:
+    Type: String
+    Default: cron(0 6 ? * MON *)
+    Description: Lunes 6:00 en la zona horaria de abajo, para tener el costo listo antes de las 9:00 (N1)
+  ScheduleState:
+    Type: String
+    Default: ENABLED
+    AllowedValues: [ENABLED, DISABLED]
+
+Resources:
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-${Environment}-alertas"
+      DisplayName: Indice del Taco - alertas
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+  AlertTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics: [!Ref AlertTopic]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AlarmasDeCloudWatchDeEstaCuenta
+            Effect: Allow
+            Principal: { Service: cloudwatch.amazonaws.com }
+            Action: sns:Publish
+            Resource: !Ref AlertTopic
+            Condition:
+              StringEquals:
+                "aws:SourceAccount": !Ref AWS::AccountId
+
+  OrchestratorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-orquestador-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: orquestador
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProjectName}-${Environment}-ingesta-banxico"
+                  - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProjectName}-${Environment}-silver"
+                  - !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ProjectName}-${Environment}-gold"
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref AlertTopic
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub
+                  - "${B}/registro_ejecuciones/*"
+                  - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-arn" }
+
+  OrchestratorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-${Environment}-orquestador"
+      RetentionInDays: 14
+
+  OrchestratorFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: OrchestratorLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-orquestador"
+      Runtime: python3.13
+      Handler: handlers.orquestador.handler
+      Role: !GetAtt OrchestratorRole.Arn
+      Timeout: 300
+      MemorySize: 256
+      Layers: [!Ref PandasLayerArn]
+      Environment:
+        Variables:
+          BANXICO_FUNCTION: !Sub "${ProjectName}-${Environment}-ingesta-banxico"
+          SILVER_FUNCTION: !Sub "${ProjectName}-${Environment}-silver"
+          GOLD_FUNCTION: !Sub "${ProjectName}-${Environment}-gold"
+          ALERT_TOPIC_ARN: !Ref AlertTopic
+          SILVER_BUCKET: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-name" }
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+  OrchestratorNoRetries:
+    # Una falla ya se avisa desde el orquestador; sin reintentos automaticos no llegan correos repetidos
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref OrchestratorFunction
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 0
+
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-scheduler-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                "aws:SourceAccount": !Ref AWS::AccountId
+      Policies:
+        - PolicyName: invocar-orquestador
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt OrchestratorFunction.Arn
+
+  WeeklySchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-semanal"
+      Description: Corrida semanal del pipeline (lunes 6:00, hora de CDMX)
+      State: !Ref ScheduleState
+      ScheduleExpression: !Ref ScheduleExpression
+      ScheduleExpressionTimezone: America/Mexico_City
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt OrchestratorFunction.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: "{}"
+
+  OrchestratorErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-orquestador-errores"
+      AlarmDescription: El orquestador fallo (incluye caidas, timeouts y falta de memoria que el propio orquestador no puede avisar)
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OrchestratorFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  NoRunAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-${Environment}-sin-ejecucion-7-dias"
+      AlarmDescription: El orquestador no se ejecuto en 7 dias (el schedule semanal no esta corriendo)
+      Namespace: AWS/Lambda
+      MetricName: Invocations
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OrchestratorFunction
+      Statistic: Sum
+      Period: 86400
+      EvaluationPeriods: 7
+      DatapointsToAlarm: 7
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertTopic]
+
+Outputs:
+  AlertTopicArn:
+    Value: !Ref AlertTopic
+  OrchestratorFunctionName:
+    Value: !Ref OrchestratorFunction
+  ScheduleName:
+    Value: !Ref WeeklySchedule

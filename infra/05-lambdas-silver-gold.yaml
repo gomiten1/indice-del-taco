@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Lambdas de silver y gold (mismo paquete, dos handlers) con roles de minimo privilegio por bucket.
+
+Parameters:
+  ProjectName:
+    Type: String
+    AllowedPattern: "^[a-z0-9-]{3,30}$"
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+  CodeBucket:
+    Type: String
+    Description: Bucket de artefactos donde esta el .zip (ver 00-artefactos.yaml)
+  CodeKey:
+    Type: String
+    Description: Llave del .zip del pipeline (lo sugiere infra/empaquetar_lambda.py pipeline)
+  PandasLayerArn:
+    Type: String
+    Default: arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python313:17
+    Description: Capa administrada AWS SDK for pandas (trae pandas y pyarrow). El ARN depende de la region
+
+Resources:
+  SilverFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-silver-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: silver-lee-bronze-escribe-silver
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  - !Sub
+                    - "${B}/raw/chat/*"
+                    - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-bronze-bucket-arn" }
+                  - !Sub
+                    - "${B}/raw/banxico/*"
+                    - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-bronze-bucket-arn" }
+                  - !Sub
+                    - "${B}/raw/interno/*"
+                    - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-bronze-bucket-arn" }
+              - Effect: Allow
+                # Sin ListBucket, un archivo que falta daria 403 en vez de NoSuchKey
+                Action: s3:ListBucket
+                Resource: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-bronze-bucket-arn" }
+                Condition:
+                  StringLike:
+                    "s3:prefix": ["raw/chat/*", "raw/banxico/*", "raw/interno/*"]
+              - Effect: Allow
+                Action: [s3:PutObject, s3:DeleteObject]
+                Resource: !Sub
+                  - "${B}/*"
+                  - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-arn" }
+              - Effect: Allow
+                # Lista silver para borrar las particiones que el reproceso ya no trae
+                Action: s3:ListBucket
+                Resource: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-arn" }
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub
+                  - "${B}/*"
+                  - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-quarantine-bucket-arn" }
+
+  GoldFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-gold-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: gold-lee-silver-escribe-gold
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub
+                  - "${B}/*"
+                  - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-arn" }
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-arn" }
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub
+                  - "${B}/*"
+                  - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-gold-bucket-arn" }
+
+  SilverFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-${Environment}-silver"
+      RetentionInDays: 14
+
+  GoldFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-${Environment}-gold"
+      RetentionInDays: 14
+
+  SilverFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: SilverFunctionLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-silver"
+      Runtime: python3.13
+      Handler: handlers.silver.handler
+      Role: !GetAtt SilverFunctionRole.Arn
+      Timeout: 120
+      MemorySize: 512
+      Layers: [!Ref PandasLayerArn]
+      Environment:
+        Variables:
+          BRONZE_BUCKET: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-bronze-bucket-name" }
+          SILVER_BUCKET: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-name" }
+          QUARANTINE_BUCKET: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-quarantine-bucket-name" }
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+  GoldFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: GoldFunctionLogGroup
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${Environment}-gold"
+      Runtime: python3.13
+      Handler: handlers.gold.handler
+      Role: !GetAtt GoldFunctionRole.Arn
+      Timeout: 120
+      MemorySize: 512
+      Layers: [!Ref PandasLayerArn]
+      Environment:
+        Variables:
+          SILVER_BUCKET: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-name" }
+          GOLD_BUCKET: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-gold-bucket-name" }
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: environment
+          Value: !Ref Environment
+
+Outputs:
+  SilverFunctionName:
+    Value: !Ref SilverFunction
+  GoldFunctionName:
+    Value: !Ref GoldFunction
