@@ -4,3 +4,7 @@
 # Datos pesados
 data/*
 
+# Entorno
+.venv
+__pycache__/
+.pytest_cache/

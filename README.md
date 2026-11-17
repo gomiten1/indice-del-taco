@@ -77,7 +77,15 @@ Todas las decisiones relevantes se registran como ADR en [`docs/adr/`](docs/adr/
 
 ## Datos
 
-El chat del proveedor, la receta y las ventas son **datos sintéticos** generados con un script reproducible (semilla fija), por lo que cualquiera puede obtener exactamente los mismos datos. El generador incluye errores intencionales (precios en cero, fechas inválidas) para probar la cuarentena. [EN CONSTRUCCIÓN] *Instrucciones de uso: pendientes (H1).*
+El chat del proveedor, la receta y las ventas son **datos sintéticos** generados con un script reproducible (semilla fija), por lo que cualquiera puede obtener exactamente los mismos datos. El generador incluye errores intencionales (precios en cero, fechas inválidas) para probar la cuarentena. Se generan con `datos_sinteticos/generador.py` (decisiones y supuestos en el [ADR 0007](docs/adr/0007-datos-sinteticos-reconstruccion.md)):
+
+```bash
+python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m datos_sinteticos.generador --semilla 42 --salida data/sintetico   # agrega --sin-errores para un chat limpio
+.venv/bin/python -m pytest                                                           # generador y parser
+```
+
+Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del chat vive en `src/ingesta/parser_chat.py`.
 
 ## Cómo desplegarlo
 
@@ -114,12 +122,12 @@ El chat del proveedor, la receta y las ventas son **datos sintéticos** generado
 │   ├── runbook.md          # [EN CONSTRUCCIÓN]
 │   └── costos.md           # [EN CONSTRUCCIÓN]
 ├── infra/                  # [EN CONSTRUCCIÓN] Plantillas de CloudFormation
-├── src/                    # [EN CONSTRUCCIÓN] ingesta, transformacion, calidad y gold
+├── src/                    # ingesta/parser_chat.py; [EN CONSTRUCCIÓN] transformacion, calidad y gold
 ├── sql/                    # [EN CONSTRUCCIÓN] DDL de Athena y consultas por pregunta
-├── datos_sinteticos/       # [EN CONSTRUCCIÓN] Generador reproducible (semilla fija)
+├── datos_sinteticos/       # Generador reproducible (semilla fija)
 ├── dashboard/              # [EN CONSTRUCCIÓN]
 ├── snapshot_gold/          # [EN CONSTRUCCIÓN] Copia de las tablas gold para el dashboard
-├── tests/                  # [EN CONSTRUCCIÓN]
+├── tests/                  # Pruebas del parser y del generador
 ├── .env.example            # Variables de entorno de ejemplo, sin valores reales
 ├── LICENSE
 └── README.md
@@ -132,6 +140,7 @@ El chat del proveedor, la receta y las ventas son **datos sintéticos** generado
 - [Aclaraciones](docs/consultoria/aclaraciones.md): contradicciones encontradas y preguntas pendientes.
 - [Fuentes de datos](docs/fuentes.md): validación de cada fuente.
 - [ADR 0001: Alcance](docs/adr/0001-alcance.md)
+- [ADR 0007: Datos sintéticos](docs/adr/0007-datos-sinteticos-reconstruccion.md)
 
 ## Avance
 
