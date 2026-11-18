@@ -39,8 +39,8 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 
 | Qué | Nota |
 | :---- | :---- |
-| **P2 y P3 completos** | Necesitan PROFECO: bajar los CSV a mano (descarga bloqueada con 403 desde local; no se probó desde AWS), filtrar CDMX, proxies ([ADR 0015](docs/adr/0015-proxies-pastor-y-suadero.md)) y mayoreo con muestra mínima |
-| Inflación de alimentos (N4) | Falta encontrar la serie ([ADR 0018](docs/adr/0018-inflacion-con-banxico.md)) |
+| **P2 y P3 completos** | Necesitan los CSV de PROFECO, que hay que bajar a mano: ver [Datos que faltan, §1](#1-profeco-precios-de-mercado-lo-más-importante) |
+| Inflación de alimentos (N4) | Falta la clave de la serie en Banxico: ver [Datos que faltan, §2](#2-inflación-de-alimentos-banxico-e-inegi) |
 | Script de despliegue | Reemplazar los comandos sueltos por uno reproducible y unificar plantillas (00 a 07) |
 | CI en GitHub | `pytest` y `cfn-lint` en cada PR (el CD con OIDC se decide después) |
 | Imagen del diagrama | La de Diagramon sigue mostrando una VPC y eventos de S3; el diagrama vigente es el del README |
@@ -64,6 +64,108 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | Costo del taco | Solo la carne | [ADR 0005](docs/adr/0005-salsa.md) |
 
 Todas las decisiones están como "aceptadas provisionalmente" y esperan la revisión del equipo. Dos requieren además la **aprobación escrita de la dueña** (SOW §11): los proxies de pastor y suadero (ADR 0015) y dejar INEGI y SNIIM fuera del alcance (ADR 0011 y 0018).
+
+## Datos que faltan y cómo conseguirlos
+
+Lo que más limita hoy al proyecto no es código sino **datos**. Esta es la lista, en orden de utilidad, con lo que desbloquea cada uno.
+
+| # | Dato | Desbloquea | Estado hoy | Quién y cuánto cuesta |
+| :---- | :---- | :---- | :---- | :---- |
+| 1 | **Precios de PROFECO** (CSV de CDMX) | **P2**, P3 completa, N2 y N3 | Ninguno cargado: `raw/profeco/` está vacío en bronze | Cualquiera con navegador, ~30 min |
+| 2 | **Serie de inflación de alimentos** (Banxico) | **N4** completa | No encontrada | Cualquiera, ~15 min en la web de Banxico |
+| 3 | Datos reales del cliente (receta completa, chat real, ventas) y respuestas a las aclaraciones | Costo completo, N7, N8 | Solo hay datos sintéticos y supuestos | Líder, con Doña Ofelia o Diego |
+| 4 | ID del INPC en INEGI | Contraste del INPC (opcional, [ADR 0018](docs/adr/0018-inflacion-con-banxico.md)) | Bloqueado | Opcional, baja prioridad |
+| 5 | El *brief* original del proyecto | Casos reales del parser | Reconstruido ([ADR 0007](docs/adr/0007-datos-sinteticos-reconstruccion.md)) | Opcional |
+
+### 1. PROFECO: precios de mercado (lo más importante)
+
+**Qué es:** el programa *Quién es quién en los precios*, publicado en datos.gob.mx como un CSV por quincena. Es la única fuente de mercado
+del proyecto (menudeo y, con las filas de Central de Abasto, mayoreo). SNIIM se descartó ([ADR 0011](docs/adr/0011-ingesta-hibrida-profeco-sniim.md)).
+
+**Por qué es a mano:** el 14/11 los 55 CSV devolvieron `403` (protección Akamai) a `curl`, desde una máquina local. **No se ha probado desde AWS.**
+Desde un navegador sí se descargan.
+
+**Dónde:** <https://www.datos.gob.mx/dataset/programa_quien_es_quien_precios_2026> (cada recurso tiene su botón de descarga).
+
+**Qué hay en 2026** (lista leída de los metadatos de CKAN del 14/11; el dataset se actualizó por última vez el 22/09/2026):
+
+| Mes | Archivos publicados |
+| :---- | :---- |
+| Enero | `b01_2026_q1.csv`, `b01_2026_q2.csv` |
+| Febrero | `b02_2026_q2.csv` (**falta** la primera quincena) |
+| Marzo y abril | **no hay** |
+| Mayo | `b05_2026_q1.csv`, `b05_2026_q2.csv` |
+| Junio | `b06_2026_q1.csv`, `b06_2026_q2.csv` |
+| Julio | `b07_2026_q1.csv`, `b07_2026_q2.csv` |
+| Agosto en adelante | **no hay** (todavía no publicados) |
+
+Los datos sintéticos del chat cubren de enero a septiembre, así que donde PROFECO no tenga archivo la comparación saldrá como **«sin dato»**
+([ADR 0019](docs/adr/0019-datos-faltantes-sin-dato.md)); no se interpola.
+
+**Qué descargar, por prioridad:**
+1. **Mínimo, para probar el pipeline:** `b07_2026_q2.csv`. Es el que ya validamos: 223.5 MB, 744,623 filas, 15 columnas, UTF-8 con BOM; CDMX son 157,076 filas.
+2. **Recomendado:** julio completo (`b07_2026_q1` y `q2`) y junio (`b06_2026_q1` y `q2`). Julio es el único mes del tercer trimestre disponible, que es el que usa P3.
+3. **Ideal:** los 9 archivos de 2026 (cada uno pesa del orden de 200 MB; solo se midió el de `b07_2026_q2`).
+
+**Cómo:**
+1. Abrir la página del dataset y descargar cada archivo con el navegador. Conservar el nombre original (`bMM_AAAA_qN.csv`: es la llave de idempotencia).
+2. Guardarlos en `data/profeco/` (esa carpeta no se sube a git).
+3. Comprobar cada uno: debe tener 15 columnas y la primera es `producto` (con BOM invisible); `wc -l` debe dar cientos de miles de líneas.
+4. Subirlos a bronze (o pasármelos y los subo yo con una URL prefirmada):
+   ```bash
+   aws s3 cp data/profeco/b07_2026_q2.csv s3://indice-del-taco-dev-bronze-<ID-DE-CUENTA>/raw/profeco/csv/b07_2026_q2.csv
+   ```
+
+**Lo que hago yo cuando lleguen** (roadmap 1.4, 2.2, 2.2b, 3.2, 3.4):
+silver de PROFECO (filtro CDMX y columnas leyendo por partes, para no pasar la memoria de Lambda; regla para los ~11 mil duplicados por quincena), la tabla de equivalencias
+de cortes ([ADR 0015](docs/adr/0015-proxies-pastor-y-suadero.md), pendiente de la aprobación de la dueña), `comparativo_proveedor` (P2), más insumos en P3, la tabla de Athena y,
+con un archivo real, la **repetición de la prueba Parquet contra CSV** ([`docs/parquet-vs-csv.md`](docs/parquet-vs-csv.md)).
+
+**Límites a tener presentes:** PROFECO es quincenal y gold es semanal (se agrupa por `fecha_registro`); la muestra de mayoreo en Central de Abasto es pequeña
+(tortilla 2 filas, cilantro 1 en esa quincena); no hay pastor ni suadero, solo proxies.
+
+### 2. Inflación de alimentos (Banxico) e INEGI
+
+**Estado verificado el 18/11:**
+- Banxico `SP1` (INPC general) funciona; es la que se usa hoy.
+- Se barrieron las series `SP1` a `SP140` y `SP74560` a `SP74720` buscando alimentos: **no aparece**. Lo que existe en esos rangos es otra cosa:
+  `SP103` es gasolina (misma familia que `SP1`, «IPC por objeto del gasto Nacional»), y `SP74625` a `SP74640` son subyacente y no subyacente.
+- INEGI: el token funciona, pero el catálogo que tenemos es el de BISE, que **no incluye el INPC**; el del banco BIE responde `110 No autorizado` con nuestro token.
+
+**Cómo conseguir la clave (la opción recomendada, Banxico):**
+1. Entrar al Sistema de Información Económica (SIE) en banxico.org.mx.
+2. Ir a *Precios e inflación* → *Índices de precios al consumidor* → INPC **por objeto del gasto**, y elegir el grupo **«Alimentos, bebidas y tabaco»**.
+3. En la ficha de la serie aparece su **clave** (con forma `SPxxxxx`, como `SP1`). Debe ser mensual y de la misma familia que el índice general.
+4. Pasármela. Opcionalmente, anotar también la de **«Agropecuarios / Pecuarios»** (carne y huevo), que se parece más al taco que el grupo completo.
+5. Comprobarla antes de pasármela:
+   ```bash
+   curl -s -H "Bmx-Token: $BANXICO_TOKEN" "https://www.banxico.org.mx/SieAPIRest/service/v1/series/SPxxxxx"   # debe traer titulo, Mensual y fechaFin reciente
+   ```
+
+**Lo que hago yo con la clave** (roadmap 1.7 y 3.3): la Lambda de Banxico ya acepta varias series (`BANXICO_SERIES`); falta que silver guarde cada serie y que gold llene
+`inpc_alimentos_base100`, con sus pruebas y el despliegue. Cierra la parte de alimentos de N4.
+
+**INEGI (opcional):** solo serviría para contrastar el INPC de Banxico. Si alguien quiere intentarlo: el *Constructor de consultas* de la guía oficial
+(<https://www.inegi.org.mx/servicios/api_indicadores.html>) entrega el ID del indicador; se prueba con
+`.../INDICATOR/<ID>/es/00/true/BISE/2.0/<TOKEN>?type=json` (si da `ErrorCode:100`, el indicador es del banco BIE). Ver `docs/fuentes.md`.
+
+### 3. Datos reales del cliente y aclaraciones
+
+Hoy el chat del proveedor, la receta y las ventas son **sintéticos**. Para que el índice sea del negocio y no una demostración hace falta pedirle a Doña Ofelia (o a Diego, su sobrino):
+
+| Qué pedir | Para qué |
+| :---- | :---- |
+| **Exportación real del chat de WhatsApp** con Don Beto (`.txt`) | Precios reales; **probar el parser con el formato real** (se asumió el de Android, [ADR 0007](docs/adr/0007-datos-sinteticos-reconstruccion.md)) |
+| **Receta completa**: gramos de tortilla, cebolla, cilantro, limón, piña y salsa por taco | Que el costo no sea solo la carne ([ADR 0005](docs/adr/0005-salsa.md)) |
+| **Ventas** (exportes de caja) | Dato de apoyo, no entra al índice |
+| Respuestas a **A1 a A6** y a las 6 preguntas pendientes de [`aclaraciones.md`](docs/consultoria/aclaraciones.md) | Confirmar el aumento («30 %» contra ≈ 12 %), tacos por kilo, merma, desde cuándo comparar |
+| **Aprobación por escrito** de los proxies (ADR 0015) y de dejar INEGI y SNIIM fuera (ADR 0011 y 0018) | SOW §11: son cambios de alcance |
+
+**Ojo con la privacidad:** el chat real trae nombre y teléfono del proveedor. Va **solo a bronze privado**; nunca al repositorio ni al dashboard.
+
+### 4. El *brief* original (opcional)
+
+El SOW lo cita para el extracto del chat y los casos del parser; no está en el repositorio. Si el equipo lo tiene, pasarlo para comparar con lo reconstruido.
 
 ## Principio de recorte
 
@@ -90,10 +192,10 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 1.1 | ✅ | Generador sintético con semilla fija (chat, receta, ventas) con errores intencionales | D |
 | 1.2 | ✅ | Parser del chat de WhatsApp con pruebas | D |
 | 1.3 | ✅ | Lambda de Banxico: idempotente, sin reescribir si no cambió, token en Parameter Store | D |
-| 1.4 | ⬜ | PROFECO: carga manual de al menos una quincena de CDMX a bronze (`raw/profeco/csv/bMM_AAAA_qN.csv`) | D |
+| 1.4 | ⬜ | PROFECO: **bajar a mano** al menos `b07_2026_q2.csv` (idealmente julio y junio) y cargarlos a bronze como `raw/profeco/csv/bMM_AAAA_qN.csv`. Pasos en «Datos que faltan §1» | D |
 | 1.5 | ✅ | Buckets silver, gold, cuarentena y artefactos | D |
-| 1.6 | ⬜ | Lambda de INEGI (se descarta por ahora, ADR 0018) | X |
-| 1.7 | ⬜ | Serie de inflación de alimentos en Banxico o INEGI | D |
+| 1.6 | ⬜ | Lambda de INEGI (se descarta por ahora, ADR 0018; solo contrastaría el INPC). Ver «Datos que faltan §2» | X |
+| 1.7 | ⬜ | Serie de inflación de alimentos de Banxico: **falta la clave** (se barrieron `SP1` a `SP140` y `SP74560` a `SP74720` sin encontrarla). Cómo conseguirla en «Datos que faltan §2» | D |
 
 ### Fase 2 · Silver y calidad
 
