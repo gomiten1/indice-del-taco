@@ -63,4 +63,4 @@ curl "https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/CL_IN
 ```
 
 En la siguiente ronda esto se mete a un script en `src/ingesta/` o,
-mejor, al handler de la Lambda de `infra/02-lambda.yaml`.
+mejor, al handler de la Lambda de `infra/04-lambda-ingesta-banxico.yaml` (ya hecho: `src/ingesta/banxico.py`).

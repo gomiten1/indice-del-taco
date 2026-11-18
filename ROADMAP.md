@@ -43,8 +43,8 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | Inflación de alimentos (N4) | Falta encontrar la serie ([ADR 0018](docs/adr/0018-inflacion-con-banxico.md)) |
 | Script de despliegue | Reemplazar los comandos sueltos por uno reproducible y unificar plantillas (00 a 07) |
 | CI en GitHub | `pytest` y `cfn-lint` en cada PR (el CD con OIDC se decide después) |
-| Diagrama y README | Reflejar lo construido (el diagrama aún muestra una VPC y eventos de S3) |
-| Limpieza | Quitar o marcar como obsoleta `infra/02-lambda.yaml` (demo); decidir si `bronze_local/` (3.9 MB) se queda en git; `CLAUDE.md` sin seguimiento |
+| Imagen del diagrama | La de Diagramon sigue mostrando una VPC y eventos de S3; el diagrama vigente es el del README |
+| Limpieza | Decidir si `bronze_local/` (3.9 MB) se queda en git; `CLAUDE.md` sin seguimiento |
 | Comparación CSV vs Parquet | Criterio de E3 pendiente |
 | Equipo | PRs de las ramas, revisión por otra persona, reparto de responsables, enviar a la dueña las aclaraciones A1 a A6 |
 | Presentación y video | Presentación de 10 minutos y video demo de 3 a 5 minutos |
@@ -142,7 +142,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 5.4 | 🔶 | ADRs (hay 19) y diccionario hechos; falta el README final con hallazgos y aprendizajes | D |
 | 5.5 | ⬜ | Presentación de 10 minutos y video demo de 3 a 5 minutos | D |
 | 5.6 | 🔶 | Guía de réplica escrita; con limitaciones (productos e insumos van en el código) | S |
-| 5.7 | ⬜ | Actualizar el diagrama de arquitectura | D |
+| 5.7 | 🔶 | Diagrama real de la arquitectura en el README (Mermaid). Si se necesita para la presentación, regenerar la imagen de Diagramon (la actual está desactualizada) | D |
 | 5.8 | ⬜ | Prueba de N7 con la dueña (4 preguntas en < 5 minutos) y acta de entrega | D |
 
 ## Línea de corte
