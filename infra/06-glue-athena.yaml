@@ -260,6 +260,7 @@ Resources:
             - { Name: indice_taco_base100, Type: "decimal(8,2)" }
             - { Name: inpc_general_base100, Type: "decimal(8,2)" }
             - { Name: inpc_alimentos_base100, Type: "decimal(8,2)" }
+            - { Name: inpc_pecuarios_base100, Type: "decimal(8,2)" }
             - { Name: base_mes, Type: date }
             - { Name: brecha_pp, Type: "decimal(8,2)" }
           Location: !Sub ["s3://${B}/comparativo_inflacion/", { B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-gold-bucket-name" } }]

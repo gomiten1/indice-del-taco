@@ -1,6 +1,6 @@
 """Gold: costo por taco e Índice del Taco (P1), precio semanal por insumo y comparación con la inflación (P4).
 
-Contrato: docs/diccionario_datos.md. Decisiones: ADR 0003 (precio del proveedor = último precio vigente de la
+Contrato: docs/diccionario_datos.md. La inflación de alimentos (N4) sale de las series SP66540 y SP56386 de Banxico. Decisiones: ADR 0003 (precio del proveedor = último precio vigente de la
 semana), 0005 (la salsa no entra; el costo cuenta solo los insumos con dato), 0008 (merma solo en pastor, como
 versión aparte) y 0009 (semana base = primera semana con todos los insumos de la receta).
 
@@ -14,6 +14,9 @@ from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 import pyarrow as pa
+
+# Series del INPC de Banxico (docs/fuentes.md). General, alimentos (subyacente: productos procesados) y pecuarios (no subyacente: más volátil).
+SERIE_GENERAL, SERIE_ALIMENTOS, SERIE_PECUARIOS = "SP1", "SP66540", "SP56386"
 
 MERMA_PASTOR = Decimal("0.12")  # ADR 0008: parte del trompo que no se vende (≈12 %)
 
@@ -34,7 +37,8 @@ ESQUEMA_PRECIO_INSUMO = pa.schema([
 ESQUEMA_INFLACION = pa.schema([
     ("anio", pa.int32()), ("mes", pa.int32()), ("tipo_taco", pa.string()),
     ("indice_taco_base100", pa.decimal128(8, 2)), ("inpc_general_base100", pa.decimal128(8, 2)),
-    ("inpc_alimentos_base100", pa.decimal128(8, 2)), ("base_mes", pa.date32()), ("brecha_pp", pa.decimal128(8, 2))])
+    ("inpc_alimentos_base100", pa.decimal128(8, 2)), ("inpc_pecuarios_base100", pa.decimal128(8, 2)),
+    ("base_mes", pa.date32()), ("brecha_pp", pa.decimal128(8, 2))])
 ESQUEMA_CONTRIBUCION = pa.schema([
     ("trimestre", pa.string()), ("tipo_taco", pa.string()), ("insumo", pa.string()),
     ("aportacion_mxn", pa.decimal128(8, 2)), ("aportacion_pct", pa.decimal128(8, 2)), ("ranking", pa.int32()), ("estado", pa.string())])
@@ -132,9 +136,15 @@ def calcular_gold(precios: pa.Table, receta: pa.Table, inpc: pa.Table | None, se
                     "semana_base": base if costo_base is not None else None, "incluye_merma": con_merma,
                     "insumos_con_dato": con_dato})
 
-    inpc_mes = {}
+    inpc_mes: dict[str, dict[tuple[int, int], Decimal]] = {}  # serie -> {(año, mes): índice}
     if inpc is not None:
-        inpc_mes = {(f["fecha"].year, f["fecha"].month): f["indice"] for f in inpc.to_pylist() if f["serie_id"] == "SP1"}
+        for f in inpc.to_pylist():
+            inpc_mes.setdefault(f["serie_id"], {})[(f["fecha"].year, f["fecha"].month)] = f["indice"]
+
+    def rebase(serie, anio, mes, mes_base):
+        """Índice de la serie con base 100 en el mismo mes que el índice del taco; None si falta la serie o alguno de los dos meses."""
+        v = inpc_mes.get(serie, {})
+        return v[(anio, mes)] / v[mes_base] * 100 if (anio, mes) in v and mes_base in v else None
     filas_inflacion = []
     for tipo in sorted(recetas):
         base = base_de.get(tipo)
@@ -148,12 +158,13 @@ def calcular_gold(precios: pa.Table, receta: pa.Table, inpc: pa.Table | None, se
         mes_base = _mes_de(base)
         for (anio, mes), m in sorted(media.items()):
             indice = m / media[mes_base] * 100
-            inpc_idx = None
-            if (anio, mes) in inpc_mes and mes_base in inpc_mes:
-                inpc_idx = inpc_mes[(anio, mes)] / inpc_mes[mes_base] * 100
+            inpc_idx = rebase(SERIE_GENERAL, anio, mes, mes_base)
+            alimentos, pecuarios = rebase(SERIE_ALIMENTOS, anio, mes, mes_base), rebase(SERIE_PECUARIOS, anio, mes, mes_base)
             filas_inflacion.append({
                 "anio": anio, "mes": mes, "tipo_taco": tipo, "indice_taco_base100": _q(indice),
-                "inpc_general_base100": _q(inpc_idx) if inpc_idx is not None else None, "inpc_alimentos_base100": None,
+                "inpc_general_base100": _q(inpc_idx) if inpc_idx is not None else None,
+                "inpc_alimentos_base100": _q(alimentos) if alimentos is not None else None,
+                "inpc_pecuarios_base100": _q(pecuarios) if pecuarios is not None else None,
                 "base_mes": date(*mes_base, 1), "brecha_pp": _q(indice - inpc_idx) if inpc_idx is not None else None})
 
     filas_contribucion = _contribucion_por_insumo(semanas, por_semana, recetas)

@@ -14,12 +14,14 @@ from transformacion import gold, parquet, silver_chat, silver_inpc, silver_recet
 from transformacion.almacen import AlmacenLocal
 
 
-def correr(chat: Path, receta: Path, inpc: Path, fecha_ingesta: date, salida: Path, ejecucion_id: str = "local") -> dict:
+def correr(chat: Path, receta: Path, inpc, fecha_ingesta: date, salida: Path, ejecucion_id: str = "local") -> dict:
+    """`inpc`: un archivo JSON de Banxico o una lista de ellos (una serie por archivo; SP1 es la obligatoria)."""
     salida = Path(salida)
+    inpc = [Path(inpc)] if isinstance(inpc, (str, Path)) else [Path(x) for x in inpc]
     silver, cuarentena, destino = (AlmacenLocal(salida / d) for d in ("silver", "cuarentena", "gold"))
     c = silver_chat.procesar_chat(Path(chat).read_text(encoding="utf-8"), Path(chat).name, fecha_ingesta, ejecucion_id)
     silver_chat.escribir(c, silver, cuarentena)
-    i = silver_inpc.procesar_inpc(Path(inpc).read_bytes(), Path(inpc).name, fecha_ingesta, ejecucion_id)
+    i = silver_inpc.combinar([silver_inpc.procesar_inpc(x.read_bytes(), x.name, fecha_ingesta, ejecucion_id) for x in inpc])
     silver_inpc.escribir(i, silver, cuarentena)
     r = silver_receta.procesar_receta(Path(receta).read_text(encoding="utf-8"), Path(receta).name, fecha_ingesta, ejecucion_id)
     silver_receta.escribir(r, silver, cuarentena)
@@ -33,7 +35,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Pipeline completo en local (silver + gold).")
     ap.add_argument("--chat", type=Path, default=Path("data/sintetico/chat_proveedor.txt"))
     ap.add_argument("--receta", type=Path, default=Path("data/sintetico/receta.csv"))
-    ap.add_argument("--inpc", type=Path, default=Path("bronze_local/banxico/SP1/SP1_datos_2026-11-14.json"))
+    ap.add_argument("--inpc", type=Path, nargs="+", default=[
+        Path("bronze_local/banxico/SP1/SP1_datos_2026-11-14.json"),
+        Path("bronze_local/banxico/SP66540/SP66540_datos_2026-11-18.json"),
+        Path("bronze_local/banxico/SP56386/SP56386_datos_2026-11-18.json")], help="un JSON de Banxico por serie")
     ap.add_argument("--fecha-ingesta", type=date.fromisoformat, default=date(2026, 11, 16))
     ap.add_argument("--salida", type=Path, default=Path("data/lake"))
     a = ap.parse_args()

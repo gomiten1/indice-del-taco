@@ -144,3 +144,41 @@ Pequeña corrección redundante (ya estaba en esta hoja, pero vale reforzar): la
 
 - **ID exacto del INPC general en INEGI.** Candidatos probados en esta ronda (`910391`, `910392`, `910395`, `910400-910412`, `910415`, `910420-910422`, `628193`, `628194`, `628223`, `628224`, `628229`, `737121`, `216064`, `463300`, `450068`, `1005000001`): todos devolvieron `ErrorCode:100`. El Constructor de consultas sigue siendo el camino oficial; alternativa: grep sobre `CL_INDICATOR_2026-11-14.json` buscando descripciones del tipo "Indice general", "subyacente", "no subyacente".
 - Banxico ya cubre P4 (comparativo contra inflación) por completo; INEGI quedaría como fuente de contraste, no bloqueante.
+
+## Catálogo del SIE y claves de la inflación (18/11/2026)
+
+La documentación del API no explica cómo encontrar la clave de una serie fuera de la web, pero **el propio sitio usa endpoints de catálogo** que no
+aparecen en la documentación (están en el JavaScript de `.../v1/doc/catalogoSeries`). Se probaron el 18/11 y **no piden token**:
+
+| Endpoint | Qué devuelve |
+| :---- | :---- |
+| `GET /SieAPIRest/service/v1/cat/sectores` | Los sectores de información |
+| `GET /SieAPIRest/service/v1/cat/sectores/{idSector}` | Las estructuras de un sector (el de precios al consumidor es el `8`) |
+| `GET /SieAPIRest/service/v1/cat/estructuras/{idCuadro}` | Las series de una estructura, **con su clave** (por ejemplo `CP154`) |
+| `GET /SieAPIRest/service/v1/cat/series/{idSerie}` | El detalle de una serie |
+| `GET /SieAPIRest/service/v1/cat/series?q=texto` | **Búsqueda por texto** de series (devuelve clave, texto, sector y estructura) |
+
+Ejemplo: `curl -G -H "Accept: application/json" --data-urlencode "q=Alimentos, Bebidas y Tabaco" https://www.banxico.org.mx/SieAPIRest/service/v1/cat/series`.
+
+**Claves del INPC, estructura «Principales índices mensuales» (`CP154`).** Cada una se comprobó contra un CSV descargado del SIE: 538 meses, sin diferencias.
+
+| Clave | Serie |
+| :---- | :---- |
+| `SP1` | INPC general (694 meses desde 1969) |
+| `SP74625` | Subyacente |
+| `SP74626` | Subyacente › Mercancías |
+| **`SP66540`** | **Subyacente › Mercancías › Alimentos, Bebidas y Tabaco** |
+| `SP74627` | Subyacente › Mercancías › Mercancías no alimenticias |
+| `SP74628` | Subyacente › Servicios |
+| `SP66542` | Subyacente › Servicios › Vivienda |
+| `SP56339` | Subyacente › Servicios › Educación (colegiaturas) |
+| `SP74629` | Subyacente › Servicios › Otros servicios |
+| `SP74630` | No subyacente |
+| **`SP56337`** | **No subyacente › Agropecuarios** |
+| `SP56385` | No subyacente › Agropecuarios › Frutas y verduras |
+| **`SP56386`** | **No subyacente › Agropecuarios › Pecuarios** |
+| `SP74631` | No subyacente › Energéticos y tarifas autorizadas por el gobierno |
+| `SP56373` | …› Energéticos |
+| `SP74640` | …› Tarifas autorizadas por el gobierno |
+
+Por qué un barrido de números no las encontraba: `SP66540` y `SP56337`, `SP56385`, `SP56386` están muy lejos de los rangos probados (`SP1` a `SP140` y `SP74000` a `SP75499`).

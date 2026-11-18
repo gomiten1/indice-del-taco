@@ -11,7 +11,7 @@ Lambdas de ingesta, silver y gold, catálogo de Glue y Athena, y la orquestació
 | `00-artefactos.yaml` | Bucket para los `.zip` de las Lambdas, separado del data lake. |
 | `01-s3-bucket.yaml` | Bucket S3 de la capa bronze: versionado, cifrado (AES‑256), acceso público bloqueado, ciclo de vida que borra versiones antiguas a los 30 días, `DeletionPolicy: Retain` (no se borra con el stack). Exporta `BronzeBucketName` y `BronzeBucketArn`. |
 | `03-s3-silver-gold-cuarentena.yaml` | Tres buckets (silver, gold, cuarentena) con las mismas prácticas que bronze. Exporta nombre y ARN de cada uno. |
-| `04-lambda-ingesta-banxico.yaml` | Lambda `python3.13` que descarga el INPC de Banxico a `raw/banxico/` de bronze. Rol con solo `s3:PutObject` en ese prefijo y `ssm:GetParameter` sobre su token. Código en `src/ingesta/banxico.py`. |
+| `04-lambda-ingesta-banxico.yaml` | Lambda `python3.13` que descarga las series del INPC de Banxico (`SP1`, `SP66540` y `SP56386`, parámetro `BanxicoSeries`) a `raw/banxico/` de bronze. Rol con solo `s3:PutObject` en ese prefijo y `ssm:GetParameter` sobre su token. Código en `src/ingesta/banxico.py`. |
 | `05-lambdas-silver-gold.yaml` | Lambdas de silver y gold (un paquete, dos handlers) con roles de mínimo privilegio por bucket y la capa de pandas. |
 | `06-glue-athena.yaml` | Base de datos y tablas de Glue (DDL manual, partition projection), workgroup de Athena con tope de bytes y bucket de resultados. |
 | `07-orquestacion-alertas.yaml` | Lambda orquestadora, EventBridge Scheduler (lunes 6:00 CDMX), tema SNS con suscripción por correo y dos alarmas de CloudWatch. |

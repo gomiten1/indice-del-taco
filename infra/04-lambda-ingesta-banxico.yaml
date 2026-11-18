@@ -13,6 +13,10 @@ Parameters:
     Type: String
     Default: /indice-del-taco/dev/banxico_token
     Description: Parametro SecureString de SSM con el token de Banxico (se crea a mano, nunca en la plantilla)
+  BanxicoSeries:
+    Type: String
+    Default: "SP1,SP66540,SP56386"
+    Description: Series de Banxico separadas por coma. SP1 INPC general (obligatoria), SP66540 Alimentos Bebidas y Tabaco, SP56386 Pecuarios
   CodeBucket:
     Type: String
     Description: Bucket de artefactos donde esta el .zip (ver 00-artefactos.yaml)
@@ -87,7 +91,7 @@ Resources:
           BRONZE_BUCKET: !ImportValue
             Fn::Sub: "${ProjectName}-${Environment}-bronze-bucket-name"
           BANXICO_TOKEN_PARAM: !Ref BanxicoTokenParameter
-          BANXICO_SERIES: SP1
+          BANXICO_SERIES: !Ref BanxicoSeries
       Code:
         S3Bucket: !Ref CodeBucket
         S3Key: !Ref CodeKey

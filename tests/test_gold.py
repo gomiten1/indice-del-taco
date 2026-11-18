@@ -33,9 +33,13 @@ def receta(*lineas):
                                  for t, i, g in lineas], schema=ESQUEMA_RECETA)
 
 
-def inpc(*meses):
-    return pa.Table.from_pylist([{"serie_id": "SP1", "fecha": f, "anio": f.year, "indice": D(v), "fecha_ingesta": date(2026, 11, 16)}
+def inpc(*meses, serie="SP1"):
+    return pa.Table.from_pylist([{"serie_id": serie, "fecha": f, "anio": f.year, "indice": D(v), "fecha_ingesta": date(2026, 11, 16)}
                                  for f, v in meses], schema=ESQUEMA_INPC)
+
+
+def varias(*tablas):
+    return pa.concat_tables(tablas)
 
 
 PRECIOS = precios(
@@ -189,3 +193,36 @@ def test_los_porcentajes_de_los_insumos_con_dato_suman_100():
 def test_un_trimestre_con_una_sola_semana_no_se_reporta():
     p = precios((datetime(2026, 1, 1, 7, 0), "pastor", "150"))
     assert filas(calcular(precios=p)["contribucion_insumo"]) == []
+
+
+# --- N4: inflación de alimentos y de pecuarios ---------------------------------
+
+def test_esquema_de_comparativo_inflacion_con_alimentos_y_pecuarios():
+    t = calcular()["comparativo_inflacion"]
+    assert [(f.name, str(f.type)) for f in t.schema] == [
+        ("anio", "int32"), ("mes", "int32"), ("tipo_taco", "string"), ("indice_taco_base100", "decimal128(8, 2)"),
+        ("inpc_general_base100", "decimal128(8, 2)"), ("inpc_alimentos_base100", "decimal128(8, 2)"),
+        ("inpc_pecuarios_base100", "decimal128(8, 2)"), ("base_mes", "date32[day]"), ("brecha_pp", "decimal128(8, 2)")]
+
+
+def test_alimentos_y_pecuarios_usan_la_misma_base_que_el_indice_del_taco():
+    """Mes base = enero. Alimentos 200 -> 206 (103.00); pecuarios 100 -> 95 (95.00); el INPC general sigue en 101.00."""
+    todo = varias(INPC, inpc((date(2026, 1, 1), "200.0"), (date(2026, 2, 1), "206.0"), serie="SP66540"),
+                  inpc((date(2026, 1, 1), "100.0"), (date(2026, 2, 1), "95.0"), serie="SP56386"))
+    por_mes = {(f["tipo_taco"], f["mes"]): f for f in filas(calcular(inpc=todo)["comparativo_inflacion"])}
+    ene, feb = por_mes[("pastor", 1)], por_mes[("pastor", 2)]
+    assert (ene["inpc_alimentos_base100"], ene["inpc_pecuarios_base100"]) == (D("100.00"), D("100.00"))
+    assert (feb["inpc_alimentos_base100"], feb["inpc_pecuarios_base100"], feb["inpc_general_base100"]) == (D("103.00"), D("95.00"), D("101.00"))
+    assert feb["brecha_pp"] == D("1.94")  # la brecha sigue medida contra el INPC general
+
+
+def test_sin_las_series_de_alimentos_quedan_vacias_pero_el_resto_se_calcula():
+    feb = [f for f in filas(calcular()["comparativo_inflacion"]) if f["tipo_taco"] == "pastor" and f["mes"] == 2][0]
+    assert feb["inpc_alimentos_base100"] is None and feb["inpc_pecuarios_base100"] is None
+    assert feb["inpc_general_base100"] == D("101.00") and feb["indice_taco_base100"] == D("102.94")
+
+
+def test_una_serie_de_alimentos_sin_el_mes_base_queda_vacia():
+    todo = varias(INPC, inpc((date(2026, 2, 1), "206.0"), serie="SP66540"))  # falta enero (el mes base)
+    feb = [f for f in filas(calcular(inpc=todo)["comparativo_inflacion"]) if f["tipo_taco"] == "pastor" and f["mes"] == 2][0]
+    assert feb["inpc_alimentos_base100"] is None

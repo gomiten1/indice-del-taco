@@ -10,7 +10,7 @@ from datos_sinteticos.generador import escribir
 from transformacion import pipeline_local, snapshot
 from transformacion.almacen import AlmacenLocal
 
-INPC = Path(__file__).parent.parent / "bronze_local/banxico/SP1/SP1_datos_2026-11-14.json"
+from tests.datos import TRES_SERIES as INPC
 
 
 @pytest.fixture(scope="module")
@@ -79,3 +79,13 @@ def test_la_exportacion_es_reproducible(lago, tmp_path):
     exportar(lago, a), exportar(lago, b)
     huella = lambda d: {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(d.glob("*.csv"))}
     assert huella(a) == huella(b)
+
+
+def test_el_snapshot_trae_la_inflacion_de_alimentos_y_de_pecuarios(lago, tmp_path):
+    exportar(lago, tmp_path)
+    c = pd.read_csv(tmp_path / "comparativo_inflacion.csv")
+    assert {"inpc_alimentos_base100", "inpc_pecuarios_base100"} <= set(c.columns)
+    pastor = c[c.tipo_taco == "pastor"].set_index("mes")
+    assert pastor.loc[1, ["inpc_general_base100", "inpc_alimentos_base100", "inpc_pecuarios_base100"]].tolist() == [100.0, 100.0, 100.0]
+    assert pastor.inpc_alimentos_base100.notna().all() and pastor.inpc_pecuarios_base100.notna().all()
+    assert pastor.loc[9, "inpc_alimentos_base100"] > pastor.loc[9, "inpc_general_base100"]  # los alimentos procesados subieron más que el INPC

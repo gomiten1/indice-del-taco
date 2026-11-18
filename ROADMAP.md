@@ -40,7 +40,7 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | Qué | Nota |
 | :---- | :---- |
 | **P2 y P3 completos** | Necesitan los CSV de PROFECO, que hay que bajar a mano: ver [Datos que faltan, §1](#1-profeco-precios-de-mercado-lo-más-importante) |
-| Inflación de alimentos (N4) | Falta la clave de la serie en Banxico: ver [Datos que faltan, §2](#2-inflación-de-alimentos-banxico-e-inegi) |
+| ~~Inflación de alimentos (N4)~~ | **Hecha el 18/11** (`SP66540` y `SP56386`, automática por la API) |
 | Script de despliegue | Reemplazar los comandos sueltos por uno reproducible y unificar plantillas (00 a 07) |
 | CI en GitHub | `pytest` y `cfn-lint` en cada PR (el CD con OIDC se decide después) |
 | Imagen del diagrama | La de Diagramon sigue mostrando una VPC y eventos de S3; el diagrama vigente es el del README |
@@ -72,7 +72,7 @@ Lo que más limita hoy al proyecto no es código sino **datos**. Esta es la list
 | # | Dato | Desbloquea | Estado hoy | Quién y cuánto cuesta |
 | :---- | :---- | :---- | :---- | :---- |
 | 1 | **Precios de PROFECO** (CSV de CDMX) | **P2**, P3 completa, N2 y N3 | Ninguno cargado: `raw/profeco/` está vacío en bronze | Cualquiera con navegador, ~30 min |
-| 2 | **Serie de inflación de alimentos** (Banxico) | **N4** completa | No encontrada | Cualquiera, ~15 min en la web de Banxico |
+| 2 | ~~Serie de inflación de alimentos~~ **Hecha** | N4 completa | **Implementada y desplegada el 18/11**, automática por la API de Banxico | Nadie: ya está |
 | 3 | Datos reales del cliente (receta completa, chat real, ventas) y respuestas a las aclaraciones | Costo completo, N7, N8 | Solo hay datos sintéticos y supuestos | Líder, con Doña Ofelia o Diego |
 | 4 | ID del INPC en INEGI | Contraste del INPC (opcional, [ADR 0018](docs/adr/0018-inflacion-con-banxico.md)) | Bloqueado | Opcional, baja prioridad |
 | 5 | El *brief* original del proyecto | Casos reales del parser | Reconstruido ([ADR 0007](docs/adr/0007-datos-sinteticos-reconstruccion.md)) | Opcional |
@@ -124,30 +124,21 @@ con un archivo real, la **repetición de la prueba Parquet contra CSV** ([`docs/
 **Límites a tener presentes:** PROFECO es quincenal y gold es semanal (se agrupa por `fecha_registro`); la muestra de mayoreo en Central de Abasto es pequeña
 (tortilla 2 filas, cilantro 1 en esa quincena); no hay pastor ni suadero, solo proxies.
 
-### 2. Inflación de alimentos (Banxico) e INEGI
+### 2. Inflación de alimentos (Banxico): resuelta y automática
 
-**Estado verificado el 18/11:**
-- Banxico `SP1` (INPC general) funciona; es la que se usa hoy.
-- Se barrieron las series `SP1` a `SP140` y `SP74560` a `SP74720` buscando alimentos: **no aparece**. Lo que existe en esos rangos es otra cosa:
-  `SP103` es gasolina (misma familia que `SP1`, «IPC por objeto del gasto Nacional»), y `SP74625` a `SP74640` son subyacente y no subyacente.
-- INEGI: el token funciona, pero el catálogo que tenemos es el de BISE, que **no incluye el INPC**; el del banco BIE responde `110 No autorizado` con nuestro token.
+**Hecho el 18/11.** El sitio del SIE usa endpoints de catálogo que no están en la documentación (incluida una **búsqueda por texto** sin token); con ellos salieron las claves,
+comprobadas contra un CSV del SIE (538 meses, sin diferencias). Detalle en [`docs/fuentes.md`](docs/fuentes.md#catálogo-del-sie-y-claves-de-la-inflación-18112026).
 
-**Cómo conseguir la clave (la opción recomendada, Banxico):**
-1. Entrar al Sistema de Información Económica (SIE) en banxico.org.mx.
-2. Ir a *Precios e inflación* → *Índices de precios al consumidor* → INPC **por objeto del gasto**, y elegir el grupo **«Alimentos, bebidas y tabaco»**.
-3. En la ficha de la serie aparece su **clave** (con forma `SPxxxxx`, como `SP1`). Debe ser mensual y de la misma familia que el índice general.
-4. Pasármela. Opcionalmente, anotar también la de **«Agropecuarios / Pecuarios»** (carne y huevo), que se parece más al taco que el grupo completo.
-5. Comprobarla antes de pasármela:
-   ```bash
-   curl -s -H "Bmx-Token: $BANXICO_TOKEN" "https://www.banxico.org.mx/SieAPIRest/service/v1/series/SPxxxxx"   # debe traer titulo, Mensual y fechaFin reciente
-   ```
+| Serie | Clave | En el pipeline |
+| :---- | :---- | :---- |
+| INPC general | `SP1` | Obligatoria (base de P4) |
+| **Alimentos, Bebidas y Tabaco** (subyacente: productos procesados) | **`SP66540`** | `inpc_alimentos_base100` |
+| **Pecuarios** (no subyacente: el más cercano a la carne) | **`SP56386`** | `inpc_pecuarios_base100` |
 
-**Lo que hago yo con la clave** (roadmap 1.7 y 3.3): la Lambda de Banxico ya acepta varias series (`BANXICO_SERIES`); falta que silver guarde cada serie y que gold llene
-`inpc_alimentos_base100`, con sus pruebas y el despliegue. Cierra la parte de alimentos de N4.
+La Lambda de Banxico trae las tres cada lunes, silver las combina (los meses `N/E`, sin dato, se omiten sin error) y gold las rebasa al mismo mes base que el índice del taco.
+Resultado, enero a septiembre: taco **+12.3 %**, INPC general +1.7 %, alimentos +2.0 %, pecuarios **−2.6 %** ([`sql/README.md`](sql/README.md)).
 
-**INEGI (opcional):** solo serviría para contrastar el INPC de Banxico. Si alguien quiere intentarlo: el *Constructor de consultas* de la guía oficial
-(<https://www.inegi.org.mx/servicios/api_indicadores.html>) entrega el ID del indicador; se prueba con
-`.../INDICATOR/<ID>/es/00/true/BISE/2.0/<TOKEN>?type=json` (si da `ErrorCode:100`, el indicador es del banco BIE). Ver `docs/fuentes.md`.
+**INEGI (opcional, sin urgencia):** solo serviría para contrastar el INPC de Banxico; la inflación de alimentos ya no depende de él ([ADR 0018](docs/adr/0018-inflacion-con-banxico.md)).
 
 ### 3. Datos reales del cliente y aclaraciones
 
@@ -195,7 +186,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 1.4 | ⬜ | PROFECO: **bajar a mano** al menos `b07_2026_q2.csv` (idealmente julio y junio) y cargarlos a bronze como `raw/profeco/csv/bMM_AAAA_qN.csv`. Pasos en «Datos que faltan §1» | D |
 | 1.5 | ✅ | Buckets silver, gold, cuarentena y artefactos | D |
 | 1.6 | ⬜ | Lambda de INEGI (se descarta por ahora, ADR 0018; solo contrastaría el INPC). Ver «Datos que faltan §2» | X |
-| 1.7 | ⬜ | Serie de inflación de alimentos de Banxico: **falta la clave** (se barrieron `SP1` a `SP140` y `SP74560` a `SP74720` sin encontrarla). Cómo conseguirla en «Datos que faltan §2» | D |
+| 1.7 | ✅ | Inflación de alimentos: `SP66540` (Alimentos, Bebidas y Tabaco) y `SP56386` (Pecuarios), automática por la API; desplegada y verificada en Athena el 18/11 | D |
 
 ### Fase 2 · Silver y calidad
 
@@ -215,7 +206,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 3.0 | ✅ | Salsa y merma decididas (ADR 0005 y 0008) | D |
 | 3.1 | ✅ | `costo_taco_semanal` e índice base 100 | D |
 | 3.2 | 🔶 | `precio_insumo_semanal` (proveedor) hecho; falta `comparativo_proveedor` (P2) | D |
-| 3.3 | 🔶 | `comparativo_inflacion` con INPC general; falta alimentos | D |
+| 3.3 | ✅ | `comparativo_inflacion` con INPC general, alimentos y pecuarios (misma base 100); en Athena coincide con el snapshot | D |
 | 3.4 | ✅ | `contribucion_insumo` (P3) con "sin dato", **desplegada el 18/11**; en Athena coincide fila por fila con el snapshot (33 filas). Falta completarla con más insumos cuando haya PROFECO | D |
 | 3.5 | 🔶 | SQL de P1, P3 y P4 en `sql/`; falta P2 | D |
 | 3.6 | 🔶 | Reproducibilidad: silver y gold son idempotentes; falta la prueba explícita desde bronze | D |
@@ -274,7 +265,7 @@ Si el 24/11 no están cerradas las fases 1 a 3, se recorta en este orden:
 | PROFECO sigue dando 403 o no funciona desde AWS | Carga manual de una o dos quincenas ([ADR 0011](docs/adr/0011-ingesta-hibrida-profeco-sniim.md)); probar la descarga desde AWS |
 | Mayoreo (N2) con muestra mínima (tortilla 2 filas, cilantro 1) | Marcar la comparación como aproximada y mostrar "sin dato" |
 | CSV de PROFECO de 223 MB exceden memoria o tiempo de Lambda (límite del orquestador: 300 s) | Leer por partes y filtrar al leer (2.2b); si crece, Step Functions |
-| Inflación de alimentos no disponible en las fuentes probadas | Tarea 1.7; si no existe, limitación documentada |
+| ~~Inflación de alimentos no disponible~~ | Resuelto (tarea 1.7) |
 | Con datos reales el snapshot revela el precio de compra | Revisar el ADR 0012 antes de publicar (redondear, mostrar solo índice o publicar con retraso) |
 | Todo vive en la cuenta personal de una persona | Plantillas y script de despliegue para recrearlo en otra cuenta (ADR 0010) |
 | Dependencias de cliente (A1 a A6) y aprobaciones de la dueña sin responder | Se trabaja con los supuestos provisionales y el dashboard los declara |
