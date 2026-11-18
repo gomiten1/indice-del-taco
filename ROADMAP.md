@@ -180,7 +180,7 @@ Si el 24/11 no están cerradas las fases 1 a 3, se recorta en este orden:
 
 ## Pendientes de decidir
 
-- **¿CD desde GitHub?** El CI (tests y lint) es seguro y barato. El despliegue automático con OIDC depende de que la cuenta permita crear el proveedor de identidad, y de quién puede hacer merge a `main` (desplegaría en la cuenta personal).
+- **¿CD desde GitHub?** El CI (tests y lint, `.github/workflows/ci.yml`) está listo. El camino habitual para desplegar desde GitHub Actions (OIDC) **está bloqueado en esta cuenta**: la política del plan gratuito niega `iam:*Provider*` (verificado el 18/11, incluso listar proveedores). Alternativas: despliegue con CodeBuild conectado a GitHub (CodeConnections, permitido en el plan), o un script de despliegue que se ejecuta a mano. Falta decidir y registrarlo en un ADR.
 - **VPC en el diagrama:** el SOW evita NAT y servidores encendidos; el diagrama dibuja una VPC y eventos de S3. Debe corregirse (tarea 5.7).
 - **Usuarios del equipo:** el SOW dice "un usuario IAM por integrante"; la cuenta usa *team members* ([ADR 0010](docs/adr/0010-cuenta-aws-y-region.md)).
 

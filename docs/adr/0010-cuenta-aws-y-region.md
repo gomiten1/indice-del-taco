@@ -25,3 +25,4 @@ Es la restricción de la cuenta, no una preferencia. Aceptarla evita pelear con 
 - Hay que confirmar el límite de gasto en AWS Settings; si se supera, el proyecto se pausa.
 - Mientras la cuenta sea personal, el equipo depende de una sola persona para desplegar; la guía de réplica y las plantillas (E6, E8) permiten recrearlo en otra cuenta.
 - La región asignada puede no coincidir con la del diagrama ("MX"); el diagrama se actualiza al final.
+- **Restricciones del plan gratuito (verificadas el 18/11):** la política de control de servicio del Free Tier niega `iam:*Provider*`, así que **no se pueden crear proveedores de identidad OIDC ni SAML** (ni listarlos). No es posible el despliegue desde GitHub Actions con OIDC; sí están permitidos `codeconnections`, `codebuild` y `codepipeline`. Ver [la documentación de AWS](https://docs.aws.amazon.com/accounts/latest/reference/scps-and-rcps-for-projects.html).
