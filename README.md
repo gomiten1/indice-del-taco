@@ -98,7 +98,7 @@ Tablas gold: `costo_taco_semanal`, `precio_insumo_semanal`, `comparativo_proveed
 ## Decisiones de diseño
 
 - **Serverless y por eventos:** sin servidores encendidos; el costo esperado está dentro del free tier de AWS.
-- **Parquet particionado + Athena:** Athena cobra por datos escaneados, así que leer menos datos reduce el costo. [EN CONSTRUCCIÓN] *Comparación de bytes escaneados CSV vs. Parquet: pendiente (H3).*
+- **Parquet particionado + Athena:** Athena cobra por datos escaneados, así que leer menos datos reduce el costo. En una prueba con el esquema de PROFECO (200 mil filas sintéticas), Parquet escaneó entre **98 % y 100 % menos** bytes que CSV con las mismas respuestas ([`docs/parquet-vs-csv.md`](docs/parquet-vs-csv.md)).
 - **Reprocesamiento idempotente:** volver a procesar una semana no duplica registros ni cambia el histórico.
 - **Dashboard público sin login:** lee un *snapshot* de las tablas gold, sin precios de compra exactos; los datos del proveedor se quedan en S3 privado. El snapshot permite que el dashboard siga funcionando aunque la cuenta de AWS ya no exista.
 - **Infraestructura como código con CloudFormation.**

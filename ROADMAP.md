@@ -45,7 +45,6 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | CI en GitHub | `pytest` y `cfn-lint` en cada PR (el CD con OIDC se decide después) |
 | Imagen del diagrama | La de Diagramon sigue mostrando una VPC y eventos de S3; el diagrama vigente es el del README |
 | Limpieza | Decidir si `bronze_local/` (3.9 MB) se queda en git; `CLAUDE.md` sin seguimiento |
-| Comparación CSV vs Parquet | Criterio de E3 pendiente |
 | Equipo | PRs de las ramas, revisión por otra persona, reparto de responsables, enviar a la dueña las aclaraciones A1 a A6 |
 | Presentación y video | Presentación de 10 minutos y video demo de 3 a 5 minutos |
 
@@ -105,7 +104,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 2.2b | ⬜ | Leer los CSV de PROFECO (223 MB) por partes sin exceder memoria ni tiempo de Lambda | D |
 | 2.3 | 🔶 | Reglas de calidad hechas para chat, INPC y receta ([ADR 0016](docs/adr/0016-reglas-y-umbrales-de-calidad.md)); falta aplicarlas a PROFECO | D |
 | 2.4 | ✅ | Glue Data Catalog (DDL manual, partition projection) y Athena | D |
-| 2.5 | ⬜ | Comparación de bytes escaneados CSV vs Parquet (E3) | D |
+| 2.5 | ✅ | Comparación de bytes escaneados CSV vs Parquet medida el 18/11: 98 % a 100 % menos con Parquet ([`docs/parquet-vs-csv.md`](docs/parquet-vs-csv.md)). Repetir con una quincena real de PROFECO | D |
 
 ### Fase 3 · Gold e Índice del Taco
 
@@ -149,7 +148,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 
 Si el 24/11 no están cerradas las fases 1 a 3, se recorta en este orden:
 
-1. Se quita: la comparación CSV vs Parquet (como limitación documentada).
+1. Se quita: nada de lo ya hecho; lo primero en recortarse sería la prueba con datos reales de PROFECO.
 2. Se acepta: PROFECO solo con una o dos quincenas cargadas a mano. El histórico sintético y las quincenas deben **alinearse en fechas**; donde no coincidan se muestra "sin dato".
 3. Se acepta: P2 y P3 como "Aún sin datos" en el dashboard.
 4. **No se recorta:** idempotencia, cuarentena, alerta con falla simulada, IaC y que el dashboard no exponga datos sensibles.
