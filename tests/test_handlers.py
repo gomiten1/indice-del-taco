@@ -5,7 +5,10 @@ import pytest
 
 from datos_sinteticos.generador import generar_chat
 from handlers import gold, silver
+from tests.datos import inpc_json
 from tests.fakes import FakeS3
+from transformacion.almacen import AlmacenS3
+from transformacion.parquet import de_bytes, leer_tabla
 
 BANXICO = (Path(__file__).parent.parent / "bronze_local/banxico/SP1/SP1_datos_2026-11-14.json").read_bytes()
 RECETA = "producto,gramos_por_taco\nsuadero,55\npastor,50\n"
@@ -108,3 +111,47 @@ def test_gold_es_idempotente(s3):
 def test_gold_sin_silver_falla_claro(s3):
     with pytest.raises(ValueError, match="silver_precio_proveedor"):
         gold.handler({}, None, s3=s3)
+
+
+# --- varias series de Banxico (N4: inflación de alimentos) -----------------------
+
+def agregar_series(s3, fecha=FECHA, series=("SP66540", "SP56386")):
+    for serie in series:
+        s3.put_object(Bucket="bronze", Key=f"raw/banxico/{serie}/fecha_ingesta={fecha}/{serie}_datos.json", Body=inpc_json(serie))
+
+
+def test_silver_combina_todas_las_series_de_banxico_en_una_tabla(s3):
+    agregar_series(s3)
+    r = silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)
+    assert r["fuentes"]["banxico"]["aceptados"] == 694 + 538 + 538 and r["fuentes"]["banxico"]["sin_dato"] == 312
+    assert r["alertas"] == []  # los meses N/E no cuentan como errores
+    tabla = leer_tabla(AlmacenS3(s3, "silver"), "silver_inpc")
+    assert {f["serie_id"] for f in tabla.to_pylist()} == {"SP1", "SP66540", "SP56386"}
+
+
+def test_silver_sigue_funcionando_si_solo_hay_el_inpc_general(s3):
+    r = silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)
+    assert r["fuentes"]["banxico"]["aceptados"] == 694 and r["alertas"] == []
+
+
+def test_silver_avisa_si_una_serie_de_banxico_esta_atrasada(s3):
+    s3.put_object(Bucket="bronze", Key="raw/banxico/SP1/fecha_ingesta=2026-11-23/SP1_datos.json", Body=inpc_json("SP1"))
+    agregar_series(s3, fecha="2026-11-01", series=("SP66540",))
+    r = silver.handler({"fecha_ingesta": "2026-11-23"}, None, s3=s3)
+    assert r["alertas"] == ["banxico: SP66540 con datos de hace 22 dias (mas de 10)"]
+    assert r["fechas_origen"]["banxico"] == "2026-11-01"  # la más antigua de las series
+
+
+def test_silver_ignora_una_serie_que_solo_tiene_archivos_futuros(s3):
+    agregar_series(s3, fecha="2027-01-01", series=("SP66540",))
+    r = silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)
+    assert r["fuentes"]["banxico"]["aceptados"] == 694
+
+
+def test_gold_llena_alimentos_y_pecuarios_cuando_estan_en_silver(s3):
+    agregar_series(s3)
+    silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)
+    gold.handler({}, None, s3=s3)
+    infl = de_bytes(s3.objetos[("gold", "comparativo_inflacion/datos.parquet")]).to_pylist()
+    sep = next(f for f in infl if f["tipo_taco"] == "pastor" and f["mes"] == 9)
+    assert sep["inpc_general_base100"] is not None and sep["inpc_alimentos_base100"] is not None and sep["inpc_pecuarios_base100"] is not None

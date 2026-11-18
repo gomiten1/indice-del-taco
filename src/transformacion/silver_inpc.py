@@ -1,7 +1,7 @@
 """Silver del INPC (Banxico SP1): JSON de bronze -> Parquet particionado por año, con cuarentena.
 
 Contrato: docs/diccionario_datos.md (`silver_inpc`). Banxico entrega el índice como texto y la fecha como
-dd/mm/aaaa; aquí se tipan. Si el JSON no tiene la forma esperada se lanza `EsquemaInesperado` (se detiene el
+dd/mm/aaaa; aquí se tipan. Los meses `N/E` (sin dato) se omiten sin error. Si el JSON no tiene la forma esperada se lanza `EsquemaInesperado` (se detiene el
 pipeline y se avisa); una fila mala va a cuarentena sin tumbar las demás.
 """
 from __future__ import annotations
@@ -18,6 +18,7 @@ from transformacion.comun import ESQUEMA_CUARENTENA, EsquemaInesperado, armar_re
 
 FUENTE = "banxico"
 TABLA_SILVER = "silver_inpc"
+SIN_DATO = {"N/E"}  # Banxico marca así los meses en que la serie no existe (p. ej. 1969 a 1981): no es un error ni se inventa un valor
 ESQUEMA_INPC = pa.schema([
     ("serie_id", pa.string()),
     ("fecha", pa.date32()),
@@ -45,9 +46,12 @@ def procesar_inpc(cuerpo: bytes, archivo_origen: str, fecha_ingesta: date, ejecu
     except (ValueError, KeyError, IndexError, TypeError) as e:
         raise EsquemaInesperado(f"{archivo_origen}: no trae bmx.series[0].datos ({e})") from None
 
-    filas, cuarentena = [], []
+    filas, cuarentena, sin_dato = [], [], 0
     for n, d in enumerate(datos, start=1):
         original = json.dumps(d, ensure_ascii=False)
+        if isinstance(d, dict) and str(d.get("dato", "")).strip().upper() in SIN_DATO:
+            sin_dato += 1  # ADR 0019: sin dato; se omite, no va a cuarentena ni cuenta para la alerta
+            continue
 
         def rechazar(regla, motivo):
             cuarentena.append(fila_cuarentena(FUENTE, regla, motivo, original, archivo_origen, n, ejecucion_id, fecha_ingesta))
@@ -69,9 +73,22 @@ def procesar_inpc(cuerpo: bytes, archivo_origen: str, fecha_ingesta: date, ejecu
             continue
         filas.append({"serie_id": serie_id, "fecha": fecha, "anio": fecha.year, "indice": indice, "fecha_ingesta": fecha_ingesta})
 
+    resumen = armar_resumen(len(datos) - sin_dato, len(filas), len(cuarentena))
+    resumen["sin_dato"] = sin_dato
     return ResultadoInpc(pa.Table.from_pylist(filas, schema=ESQUEMA_INPC),
-                         pa.Table.from_pylist(cuarentena, schema=ESQUEMA_CUARENTENA),
-                         armar_resumen(len(datos), len(filas), len(cuarentena)), archivo_origen, fecha_ingesta)
+                         pa.Table.from_pylist(cuarentena, schema=ESQUEMA_CUARENTENA), resumen, archivo_origen, fecha_ingesta)
+
+
+def combinar(resultados: list[ResultadoInpc]) -> ResultadoInpc:
+    """Junta varias series en un solo resultado. Hace falta porque silver REEMPLAZA la tabla completa al escribir:
+    escribir cada serie por separado haría que cada una borrara a las demás."""
+    if not resultados:
+        raise ValueError("No hay series para combinar")
+    suma = lambda clave: sum(r.resumen[clave] for r in resultados)
+    resumen = armar_resumen(suma("leidos"), suma("aceptados"), suma("rechazados"))
+    resumen["sin_dato"] = suma("sin_dato")
+    return ResultadoInpc(pa.concat_tables([r.inpc for r in resultados]), pa.concat_tables([r.cuarentena for r in resultados]),
+                         resumen, "series_banxico", max(r.fecha_ingesta for r in resultados))
 
 
 def escribir(resultado: ResultadoInpc, silver, cuarentena) -> list[str]:

@@ -7,7 +7,7 @@ from pathlib import Path
 from datos_sinteticos.generador import escribir
 from transformacion import pipeline_local
 
-INPC = Path(__file__).parent.parent / "bronze_local/banxico/SP1/SP1_datos_2026-11-14.json"
+from tests.datos import TRES_SERIES as INPC
 FECHA = date(2026, 11, 16)
 
 
