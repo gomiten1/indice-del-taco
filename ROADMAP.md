@@ -18,7 +18,7 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | AWS (7 stacks) | `bronze`, `lake`, `artefactos`, `banxico`, `pipeline`, `athena` y `orquestacion` (Scheduler, SNS, alarmas) |
 | Verificado en la cuenta (16/11 y 18/11) | Banxico idempotente y sin reescribir si no cambió; gold en AWS idéntico al cálculo local; Athena devuelve P1, P4 y **P3** (33 filas idénticas al snapshot); el orquestador corrió completo el 18/11 (estado `ok`, sin alertas) con el código nuevo en las tres Lambdas |
 | Dashboard y snapshot | `dashboard/app.py` (P1 a P4, avisa "Aún sin datos" y "Sin dato"), `dashboard/requirements.txt`, `snapshot_gold/` generado desde gold (reproduce byte a byte el del PR #9) |
-| Documentación | **19 ADRs** (0001 a 0019), diccionario v0, `runbook.md` y `costos.md` corregidos, guía de réplica completa, `sql/` con P1 y P4 interpretadas, `infra/README.md` |
+| Documentación | **22 ADRs** (0001 a 0022), diccionario v0, `runbook.md` y `costos.md` corregidos, guía de réplica completa, `sql/` con P1 y P4 interpretadas, `infra/README.md` |
 | Alertas y Budget (verificado en AWS el 18/11) | La **falla simulada se probó el 17/11** (ver abajo); el Budget `presupuesto-indice-del-taco` existe (10 USD al mes, avisos reales al 50 % y 80 %) |
 
 ### Por verificar (se hizo, pero falta comprobarlo)
@@ -58,12 +58,14 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | Merma del pastor | 12 % | `MERMA_PASTOR`; [ADR 0008](docs/adr/0008-merma.md). *El respaldo del dashboard usa `× 1.12`; lo correcto sería `÷ 0.88`. Solo se usa si faltan las filas con merma* |
 | Estadístico, semana base, salsa | Mediana, primera semana completa, fuera del costo | ADR 0003, 0009 y 0005 |
 | **Privacidad del snapshot** | Riesgo aceptado: el costo en pesos permite estimar el precio del proveedor | [ADR 0012](docs/adr/0012-privacidad-del-snapshot.md); revisar antes de publicar con datos reales |
+| **Umbral de «caro» o «barato» en P2** | **Abierto, lo puse yo:** ±10 % contra el menudeo | `UMBRAL_DIAGNOSTICO_PCT` en `gold.py`; [ADR 0022](docs/adr/0022-p2-mercado-unidades-y-diagnostico.md). Pregunta 7 de `aclaraciones.md`: lo debe definir la dueña |
+| Cobertura de PROFECO | Solo 16 al 31 de julio de 2026 (un CSV) | [ADR 0020](docs/adr/0020-profeco-csv-y-cobertura.md); se amplía cargando más quincenas |
 | Insumos esperados por taco (P3) | pastor, tortilla, cebolla, cilantro, limón, piña (y suadero sin piña) | `INSUMOS_ESPERADOS` en `gold.py` |
 | Tope de Athena, retención de logs, hora del schedule | 100 MB, 14 días, lunes 6:00 CDMX | `infra/06` y `07` |
 | Datos sintéticos | Formato del chat, remitentes, mensajes, `vigente_desde` de la receta | [ADR 0007](docs/adr/0007-datos-sinteticos-reconstruccion.md) |
 | Costo del taco | Solo la carne | [ADR 0005](docs/adr/0005-salsa.md) |
 
-Todas las decisiones están como "aceptadas provisionalmente" y esperan la revisión del equipo. Dos requieren además la **aprobación escrita de la dueña** (SOW §11): los proxies de pastor y suadero (ADR 0015) y dejar INEGI y SNIIM fuera del alcance (ADR 0011 y 0018).
+Todas las decisiones están como "aceptadas provisionalmente" y esperan la revisión del equipo. Tres requieren además la **aprobación escrita de la dueña** (SOW §11): los proxies de pastor y suadero (ADR 0015), dejar INEGI y SNIIM fuera del alcance (ADR 0011 y 0018) y el umbral de ±10 % de P2 (ADR 0022).
 
 ## Datos que faltan y cómo conseguirlos
 
@@ -173,7 +175,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 0.1 | ✅ | Verificar y desplegar la base en AWS (ver [ADR 0010](docs/adr/0010-cuenta-aws-y-region.md)) | D |
 | 0.2 | 🔶 | Seguridad de la cuenta: el acceso humano lo administra AWS (no hay MFA de root ni usuarios IAM propios). El Budget de 10 USD existe; falta revisar el límite de gasto en AWS Settings | D |
 | 0.3 | ✅ | Contratos de datos: `docs/diccionario_datos.md` v0 (falta revisión del equipo) | D |
-| 0.4 | ✅ | ADRs críticos: 19 escritos, entre ellos capas (0002), CloudFormation (0004), Streamlit (0006), PROFECO y SNIIM (0011), orquestación (0013) y proxies (0015); todos provisionales | D |
+| 0.4 | ✅ | ADRs críticos: 22 escritos, entre ellos capas (0002), CloudFormation (0004), Streamlit (0006), PROFECO y SNIIM (0011), orquestación (0013) y proxies (0015); todos provisionales | D |
 | 0.5 | ⬜ | Reparto real de tareas por persona; cada cambio entra por PR revisado por otra persona (SOW §7) | D |
 | 0.6 | 🔶 | Receta fijada (55 g y 50 g); faltan tortilla, verduras y la aprobación de equivalencias; enviar las aclaraciones A1 a A6 | D |
 | 0.7 | ✅ | Brief ausente: se reconstruyó y se documentó en el ADR 0007 | D |
@@ -233,7 +235,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 5.1 | ✅ | Snapshot de gold sin precios del proveedor, generado con `transformacion.snapshot` | D |
 | 5.2 | 🔶 | Dashboard en Streamlit (P1 a P4) listo y probado en local; falta la URL pública | D |
 | 5.3 | 🔶 | `docs/costos.md` con estimaciones; el Budget ya existe; falta medir el gasto real | D |
-| 5.4 | 🔶 | ADRs (hay 19) y diccionario hechos; falta el README final con hallazgos y aprendizajes | D |
+| 5.4 | 🔶 | ADRs (hay 22) y diccionario hechos; falta el README final con hallazgos y aprendizajes | D |
 | 5.5 | ⬜ | Presentación de 10 minutos y video demo de 3 a 5 minutos | D |
 | 5.6 | 🔶 | Guía de réplica escrita; con limitaciones (productos e insumos van en el código) | S |
 | 5.7 | 🔶 | Diagrama real de la arquitectura en el README (Mermaid). Si se necesita para la presentación, regenerar la imagen de Diagramon (la actual está desactualizada) | D |

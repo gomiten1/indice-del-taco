@@ -1,6 +1,6 @@
 # ADR 0022: P2 con PROFECO: precio por kilo o por manojo y diagnóstico de ±10 %
 
-**Estado:** Aceptada (el umbral de 10 % queda pendiente de la aprobación de la dueña)
+**Estado:** Aceptada provisionalmente. **Abierto:** el umbral de ±10 % lo propuso el equipo; la dueña debe confirmarlo (pregunta 7 de `docs/consultoria/aclaraciones.md`)
 **Fecha:** 2026-11-18
 
 ## Contexto

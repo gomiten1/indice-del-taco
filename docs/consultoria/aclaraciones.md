@@ -23,6 +23,8 @@ Datos que necesitaríamos y que la dueña no ha dado. Hasta que lleguen, se marc
 4. ¿Qué parte de los $600,000 mensuales de ventas son tacos de pastor y suadero?
 5. ¿Desde qué fecha quiere comparar los costos (semana base del índice)?
 6. ¿Quién puede entregar los exportes de ventas del sistema del mostrador (Diego, la cajera) y con qué frecuencia?
+7. ¿A partir de qué diferencia contra el mercado considera que un precio de su proveedor es «caro» o «barato»? Trabajamos con **±10 %** contra el precio de menudeo de PROFECO ([ADR 0022](../adr/0022-p2-mercado-unidades-y-diagnostico.md)); es un valor nuestro, no suyo, y está **abierto** hasta que lo confirme o lo cambie.
+8. ¿Cuánto pesa un manojo de cilantro y cuántos gramos lleva cada taco? Hoy el cilantro se muestra por manojo y no entra al costo por taco ([ADR 0022](../adr/0022-p2-mercado-unidades-y-diagnostico.md)).
 
 ## Cómo se actualiza este archivo
 

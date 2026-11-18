@@ -202,7 +202,7 @@ Con los datos sintéticos, de enero a septiembre el costo de la carne por taco s
 - [Diccionario de datos](docs/diccionario_datos.md) (v0)
 - [Runbook](docs/runbook.md), [costos](docs/costos.md) y [guía de réplica](docs/guia_replica.md)
 - [Roadmap](ROADMAP.md): estado, pendientes y decisiones provisionales
-- [ADRs](docs/adr/): 19 decisiones, todas provisionales hasta que las revise el equipo:
+- [ADRs](docs/adr/): 22 decisiones, todas provisionales hasta que las revise el equipo:
   - **Alcance y cuenta:** [0001 alcance](docs/adr/0001-alcance.md), [0010 cuenta y región](docs/adr/0010-cuenta-aws-y-region.md)
   - **Arquitectura:** [0002 capas y Parquet](docs/adr/0002-capas-parquet-catalogo.md), [0004 CloudFormation](docs/adr/0004-iac-cloudformation.md), [0006 dashboard](docs/adr/0006-dashboard-streamlit.md), [0013 orquestación](docs/adr/0013-orquestacion-eventbridge-y-lambda.md), [0017 idempotencia](docs/adr/0017-idempotencia-y-reproceso.md)
   - **Datos y calidad:** [0007 datos sintéticos](docs/adr/0007-datos-sinteticos-reconstruccion.md), [0011 PROFECO y SNIIM](docs/adr/0011-ingesta-hibrida-profeco-sniim.md), [0014 rezago por fuente](docs/adr/0014-frecuencia-y-rezago-por-fuente.md), [0015 proxies](docs/adr/0015-proxies-pastor-y-suadero.md), [0016 umbrales](docs/adr/0016-reglas-y-umbrales-de-calidad.md), [0018 inflación](docs/adr/0018-inflacion-con-banxico.md), [0019 sin dato](docs/adr/0019-datos-faltantes-sin-dato.md)
