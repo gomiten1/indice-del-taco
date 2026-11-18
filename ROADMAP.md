@@ -16,7 +16,7 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | :---- | :---- |
 | Código | Generador sintético; parser del chat (C1 a C11); silver del chat, el INPC y la receta (cuarentena, particiones, idempotente); gold con cuatro tablas (costo e índice base 100, precio por insumo, inflación y **P3 con "sin dato"**); handlers de Lambda (Banxico, silver, gold, orquestador); `pipeline_local` (todo el pipeline sin AWS); `snapshot` (exporta gold a los CSV del dashboard, reproducible y sin columnas del proveedor). **126 pruebas** |
 | AWS (7 stacks) | `bronze`, `lake`, `artefactos`, `banxico`, `pipeline`, `athena` y `orquestacion` (Scheduler, SNS, alarmas) |
-| Verificado en la cuenta (16/11) | Banxico idempotente y sin reescribir si no cambió; gold en AWS idéntico al cálculo local; Athena devuelve P1 y P4; el orquestador hizo una corrida real registrada |
+| Verificado en la cuenta (16/11 y 18/11) | Banxico idempotente y sin reescribir si no cambió; gold en AWS idéntico al cálculo local; Athena devuelve P1, P4 y **P3** (33 filas idénticas al snapshot); el orquestador corrió completo el 18/11 (estado `ok`, sin alertas) con el código nuevo en las tres Lambdas |
 | Dashboard y snapshot | `dashboard/app.py` (P1 a P4, avisa "Aún sin datos" y "Sin dato"), `dashboard/requirements.txt`, `snapshot_gold/` generado desde gold (reproduce byte a byte el del PR #9) |
 | Documentación | **19 ADRs** (0001 a 0019), diccionario v0, `runbook.md` y `costos.md` corregidos, guía de réplica completa, `sql/` con P1 y P4 interpretadas, `infra/README.md` |
 | Alertas y Budget (verificado en AWS el 18/11) | La **falla simulada se probó el 17/11** (ver abajo); el Budget `presupuesto-indice-del-taco` existe (10 USD al mes, avisos reales al 50 % y 80 %) |
@@ -27,7 +27,6 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | :---- | :---- | :---- |
 | **Alerta por correo (N5)** | **Verificado en AWS:** el 17/11 18:17 UTC se registró `FallaSimulada` en silver y Banxico sí corrió y gold no; la alarma `orquestador-errores` pasó a ALARM a las 18:19 y volvió a OK a las 18:33. **No verificado:** que el correo llegó y en cuánto tiempo | Guardar la captura del correo (la recibió Fernanda) y anotar la hora |
 | **Suscripciones de SNS** | Hay dos: una **confirmada (Fernanda)** y una **pendiente (la tuya)**; las pendientes se borran a las 48 h (≈ 19/11 04:32 UTC) | Aceptar el correo o reenviar la confirmación; decidir quién debe recibir las alertas |
-| **Desplegar gold con P3 y la tabla nueva de Glue** | El código y `infra/06` ya están en el repo, pero la herramienta de AWS estaba caída al escribirlo: **AWS tiene la versión anterior de gold** | Empaquetar, subir el zip y actualizar los stacks `pipeline` y `athena` |
 | Alarmas de CloudWatch | Nunca se han visto disparar solas | Provocar un error real del orquestador |
 | Schedule semanal | La primera corrida automática es el lunes 23/11 | Ver al menos **dos** corridas sin intervención (E5) |
 | Límite de gasto y región | El Budget **sí existe** (se creó a mano, no está en CloudFormation); falta revisar el límite de gasto y confirmar la región en AWS Settings | Confirmar `us-east-2` y el límite en AWS Settings; si se quiere reproducible, agregar el Budget a una plantilla |
@@ -116,8 +115,8 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 3.1 | ✅ | `costo_taco_semanal` e índice base 100 | D |
 | 3.2 | 🔶 | `precio_insumo_semanal` (proveedor) hecho; falta `comparativo_proveedor` (P2) | D |
 | 3.3 | 🔶 | `comparativo_inflacion` con INPC general; falta alimentos | D |
-| 3.4 | 🔶 | `contribucion_insumo` (P3) implementada con "sin dato"; **falta desplegarla** y completar con más insumos | D |
-| 3.5 | 🔶 | SQL de P1 y P4 en `sql/`; faltan P2 y P3 | D |
+| 3.4 | ✅ | `contribucion_insumo` (P3) con "sin dato", **desplegada el 18/11**; en Athena coincide fila por fila con el snapshot (33 filas). Falta completarla con más insumos cuando haya PROFECO | D |
+| 3.5 | 🔶 | SQL de P1, P3 y P4 en `sql/`; falta P2 | D |
 | 3.6 | 🔶 | Reproducibilidad: silver y gold son idempotentes; falta la prueba explícita desde bronze | D |
 | 3.7 | ✅ | Sensibilidad con merma (versión aparte para el pastor) | S |
 
@@ -170,7 +169,7 @@ Si el 24/11 no están cerradas las fases 1 a 3, se recorta en este orden:
 
 | Riesgo | Qué hacer |
 | :---- | :---- |
-| **AWS tiene gold sin P3** mientras el repo ya la trae | Desplegar los stacks `pipeline` y `athena` con el zip nuevo antes de volver a generar el snapshot desde S3 |
+| El snapshot se genera en local o desde S3 | Como AWS ya tiene P3 (18/11), ambos orígenes producen lo mismo; regenerar el snapshot cada vez que cambie gold |
 | PROFECO sigue dando 403 o no funciona desde AWS | Carga manual de una o dos quincenas ([ADR 0011](docs/adr/0011-ingesta-hibrida-profeco-sniim.md)); probar la descarga desde AWS |
 | Mayoreo (N2) con muestra mínima (tortilla 2 filas, cilantro 1) | Marcar la comparación como aproximada y mostrar "sin dato" |
 | CSV de PROFECO de 223 MB exceden memoria o tiempo de Lambda (límite del orquestador: 300 s) | Leer por partes y filtrar al leer (2.2b); si crece, Step Functions |
