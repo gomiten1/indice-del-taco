@@ -31,7 +31,8 @@ def handler(event, context, s3=None) -> dict:
     for nombre, tabla in (("silver_precio_proveedor", precios), ("silver_receta", receta)):
         if tabla is None:
             raise ValueError(f"No hay datos en {nombre}: corre primero la Lambda de silver")
-    tablas = gold.calcular_gold(precios, receta, inpc, semana_base=semana_base)
+    mercado = parquet.leer_tabla(silver, "silver_precio_mercado")  # opcional: solo existe si se cargó un CSV de PROFECO
+    tablas = gold.calcular_gold(precios, receta, inpc, semana_base=semana_base, mercado=mercado)
     for nombre, tabla in tablas.items():
         parquet.escribir_simple(destino, nombre, tabla)
     return {"etapa": "gold", "tablas": {n: t.num_rows for n, t in tablas.items()}}

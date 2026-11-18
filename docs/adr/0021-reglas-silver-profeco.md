@@ -12,7 +12,7 @@ Con el archivo real se vio que: no trae «pastor» ni «suadero», muchos produc
 
 - **Filtro:** solo `estado = Ciudad de México` y solo las equivalencias de [ADR 0015](0015-proxies-pastor-y-suadero.md) (pastor y suadero = proxy; longaniza, tortilla de maíz, cebolla blanca, limón, piña y cilantro = exacta).
   Se excluyen tortilla de harina, cebolla morada y cambray, piña en almíbar y cortes distintos a los del ADR.
-- **Unidad:** `precio_kg` solo si la presentación viene en kilos. En manojos (cilantro) queda vacío: no se inventa un peso.
+- **Unidad:** `precio_kg` solo si la presentación viene en kilos; si no, `unidad = manojo` y se conserva el `precio` ([ADR 0022](0022-p2-mercado-unidades-y-diagnostico.md)). No se inventa un peso.
 - **Canal:** `Central de Abasto` = mayoreo; el resto = menudeo.
 - **Cuarentena:** precio no numérico o ≤ 0, y fecha inválida. Misma alerta que las demás fuentes (> 10 %).
 - **Duplicados:** una fila por tienda, producto y día; si repiten con precios distintos, la **mediana**. Se cuenta cuántos se colapsaron (`duplicados`).
@@ -22,4 +22,4 @@ Con el archivo real se vio que: no trae «pastor» ni «suadero», muchos produc
 ## Consecuencias
 
 - Silver reemplaza la tabla completa al escribir, por lo que `combinar` junta todos los archivos antes de escribir ([ADR 0017](0017-idempotencia-y-reproceso.md)).
-- El cilantro no puede entrar a gold por kilo; P3 lo seguirá mostrando como «sin dato» salvo que la dueña dé el peso del manojo (aclaración pendiente).
+- El cilantro se publica por manojo; para el costo del taco hará falta su gramaje y el peso de un manojo (aclaración a la dueña).

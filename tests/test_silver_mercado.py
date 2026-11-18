@@ -64,6 +64,7 @@ def test_precio_por_kilo_solo_cuando_la_presentacion_es_en_kilos():
     assert sm.precio_kg("1 Kg. Granel. Miel", Decimal("25.00")) == Decimal("25.00")
     assert sm.precio_kg("Bolsa 1 Kg.", Decimal("19.50")) == Decimal("19.50")
     assert sm.precio_kg("Manojo", Decimal("10.00")) is None  # no se puede convertir sin inventar el peso
+    assert (sm.unidad("Manojo"), sm.unidad("1 Kg. Granel. Miel")) == ("manojo", "kg")
 
 
 # --- lectura: CDMX, canal y columnas ---------------------------------------------
@@ -85,7 +86,7 @@ def test_esquema_y_tipos_de_la_tabla_de_silver():
     assert [(f.name, str(f.type)) for f in r.mercado.schema] == [
         ("fecha_registro", "date32[day]"), ("anio", "int32"), ("semana_iso", "int32"), ("producto_original", "string"), ("insumo", "string"),
         ("equivalencia", "string"), ("presentacion", "string"), ("marca", "string"), ("precio", "decimal128(10, 2)"),
-        ("precio_kg", "decimal128(10, 2)"), ("canal", "string"), ("cadena_comercial", "string"), ("nombre_comercial", "string"),
+        ("precio_kg", "decimal128(10, 2)"), ("unidad", "string"), ("canal", "string"), ("cadena_comercial", "string"), ("nombre_comercial", "string"),
         ("direccion", "string"), ("municipio", "string"), ("archivo_origen", "string"), ("fecha_ingesta", "date32[day]")]
     f = filas(r)[0]
     assert (f["anio"], f["semana_iso"], f["precio_kg"], f["archivo_origen"]) == (2026, 29, Decimal("108.00"), "b07_2026_q2.csv")

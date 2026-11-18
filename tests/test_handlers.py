@@ -94,8 +94,8 @@ def test_fecha_mal_formada_falla(handler, s3):
 def test_gold_calcula_y_escribe_las_tablas(s3):
     silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)
     r = gold.handler({}, None, s3=s3)
-    assert r["etapa"] == "gold" and set(r["tablas"]) == {"costo_taco_semanal", "precio_insumo_semanal", "comparativo_inflacion", "contribucion_insumo"}
-    assert s3.llaves("gold") == ["comparativo_inflacion/datos.parquet", "contribucion_insumo/datos.parquet",
+    assert r["etapa"] == "gold" and set(r["tablas"]) == {"costo_taco_semanal", "precio_insumo_semanal", "comparativo_inflacion", "contribucion_insumo", "comparativo_proveedor"}
+    assert s3.llaves("gold") == ["comparativo_inflacion/datos.parquet", "comparativo_proveedor/datos.parquet", "contribucion_insumo/datos.parquet",
                                  "costo_taco_semanal/datos.parquet", "precio_insumo_semanal/datos.parquet"]
     assert r["tablas"]["costo_taco_semanal"] > 0
 
@@ -155,3 +155,30 @@ def test_gold_llena_alimentos_y_pecuarios_cuando_estan_en_silver(s3):
     infl = de_bytes(s3.objetos[("gold", "comparativo_inflacion/datos.parquet")]).to_pylist()
     sep = next(f for f in infl if f["tipo_taco"] == "pastor" and f["mes"] == 9)
     assert sep["inpc_general_base100"] is not None and sep["inpc_alimentos_base100"] is not None and sep["inpc_pecuarios_base100"] is not None
+
+
+# --- PROFECO (opcional, cargado a mano) ---------------------------------------------
+
+MUESTRA_PROFECO = (Path(__file__).parent.parent / "bronze_local/profeco/csv/b07_2026_q2_muestra.csv").read_bytes()
+
+
+def test_sin_csv_de_profeco_silver_y_gold_siguen_como_antes(s3):
+    r = silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)
+    assert "profeco" not in r["fuentes"] and r["cobertura_profeco"] is None
+    assert not [k for k in s3.llaves("silver") if k.startswith("silver_precio_mercado/")]
+    assert gold.handler({}, None, s3=s3)["tablas"]["comparativo_proveedor"] == 0
+
+
+def test_con_csv_de_profeco_silver_registra_la_cobertura_y_gold_llena_p2(s3):
+    s3.put_object(Bucket="bronze", Key=f"raw/profeco/fecha_ingesta={FECHA}/b07_2026_q2.csv", Body=MUESTRA_PROFECO)
+    r = silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)
+    assert r["fuentes"]["profeco"]["aceptados"] == 1839
+    assert r["cobertura_profeco"] == {"desde": "2026-07-16", "hasta": "2026-07-31"}
+    assert sorted({k.split("/")[2] for k in s3.llaves("silver") if k.startswith("silver_precio_mercado/")}) == ["semana_iso=29", "semana_iso=30", "semana_iso=31"]
+    g = gold.handler({}, None, s3=s3)
+    assert g["tablas"]["comparativo_proveedor"] == 9
+
+
+def test_un_csv_de_una_fecha_posterior_no_se_usa_todavia(s3):
+    s3.put_object(Bucket="bronze", Key="raw/profeco/fecha_ingesta=2026-12-01/b07_2026_q3.csv", Body=MUESTRA_PROFECO)
+    assert "profeco" not in silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)["fuentes"]

@@ -44,7 +44,7 @@ _KILOS = re.compile(r"^(?:bolsa\s+)?(\d+(?:[.,]\d+)?)\s*kg\b", re.I)
 ESQUEMA_MERCADO = pa.schema([
     ("fecha_registro", pa.date32()), ("anio", pa.int32()), ("semana_iso", pa.int32()), ("producto_original", pa.string()),
     ("insumo", pa.string()), ("equivalencia", pa.string()), ("presentacion", pa.string()), ("marca", pa.string()),
-    ("precio", pa.decimal128(10, 2)), ("precio_kg", pa.decimal128(10, 2)), ("canal", pa.string()), ("cadena_comercial", pa.string()),
+    ("precio", pa.decimal128(10, 2)), ("precio_kg", pa.decimal128(10, 2)), ("unidad", pa.string()), ("canal", pa.string()), ("cadena_comercial", pa.string()),
     ("nombre_comercial", pa.string()), ("direccion", pa.string()), ("municipio", pa.string()), ("archivo_origen", pa.string()),
     ("fecha_ingesta", pa.date32())])
 _CLAVE = ("producto_original", "presentacion", "marca", "nombre_comercial", "direccion", "fecha_registro")
@@ -74,6 +74,11 @@ def precio_kg(presentacion: str, precio: Decimal) -> Decimal | None:
         return None
     kilos = Decimal(m.group(1).replace(",", "."))
     return (precio / kilos).quantize(Decimal("0.01")) if kilos > 0 else None
+
+
+def unidad(presentacion: str) -> str:
+    """Unidad del `precio`: «kg» si la presentación es en kilos; «manojo» si no (hoy solo el cilantro). No se inventa un peso."""
+    return "kg" if _KILOS.match(presentacion.strip()) else "manojo"
 
 
 def _q(x: Decimal) -> Decimal:
@@ -149,7 +154,7 @@ def procesar_profeco(flujo, archivo_origen: str, fecha_ingesta: date, ejecucion_
             filas.append({
                 "fecha_registro": dia, "anio": iso.year, "semana_iso": iso.week, "producto_original": f["producto"], "insumo": insumo,
                 "equivalencia": equivalencia, "presentacion": f["presentacion"], "marca": f["marca"], "precio": precio,
-                "precio_kg": precio_kg(f["presentacion"], precio), "canal": "mayoreo" if f["giro"] == "Central de Abasto" else "menudeo",
+                "precio_kg": precio_kg(f["presentacion"], precio), "unidad": unidad(f["presentacion"]), "canal": "mayoreo" if f["giro"] == "Central de Abasto" else "menudeo",
                 "cadena_comercial": f["cadena_comercial"], "nombre_comercial": f["nombre_comercial"], "direccion": f["direccion"],
                 "municipio": f["municipio"], "archivo_origen": archivo_origen, "fecha_ingesta": fecha_ingesta})
     filas, sobrantes = _deduplicar(filas)

@@ -39,7 +39,7 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 
 | Qué | Nota |
 | :---- | :---- |
-| **P2 y P3 completos** | Necesitan los CSV de PROFECO, que hay que bajar a mano: ver [Datos que faltan, §1](#1-profeco-precios-de-mercado-lo-más-importante) |
+| ~~P2 y P3 completos~~ | **P2 hecho el 18/11** con el CSV de julio (semanas 29 a 31); P3 con más insumos depende de los gramos por taco de la dueña ([ADR 0022](docs/adr/0022-p2-mercado-unidades-y-diagnostico.md)) |
 | ~~Inflación de alimentos (N4)~~ | **Hecha el 18/11** (`SP66540` y `SP56386`, automática por la API) |
 | Script de despliegue | Reemplazar los comandos sueltos por uno reproducible y unificar plantillas (00 a 07) |
 | CI en GitHub | `pytest` y `cfn-lint` en cada PR (el CD con OIDC se decide después) |
@@ -71,13 +71,15 @@ Lo que más limita hoy al proyecto no es código sino **datos**. Esta es la list
 
 | # | Dato | Desbloquea | Estado hoy | Quién y cuánto cuesta |
 | :---- | :---- | :---- | :---- | :---- |
-| 1 | **Precios de PROFECO** (CSV de CDMX) | **P2**, P3 completa, N2 y N3 | Ninguno cargado: `raw/profeco/` está vacío en bronze | Cualquiera con navegador, ~30 min |
+| 1 | ~~Precios de PROFECO~~ | P2 | **Cargado el 18/11:** `b07_2026_q2.csv`, CDMX, **16 al 31 de julio de 2026** ([ADR 0020](docs/adr/0020-profeco-csv-y-cobertura.md)). Más quincenas ampliarían las semanas con comparación | Cualquiera, con el runbook §9 |
 | 2 | ~~Serie de inflación de alimentos~~ **Hecha** | N4 completa | **Implementada y desplegada el 18/11**, automática por la API de Banxico | Nadie: ya está |
 | 3 | Datos reales del cliente (receta completa, chat real, ventas) y respuestas a las aclaraciones | Costo completo, N7, N8 | Solo hay datos sintéticos y supuestos | Líder, con Doña Ofelia o Diego |
 | 4 | ID del INPC en INEGI | Contraste del INPC (opcional, [ADR 0018](docs/adr/0018-inflacion-con-banxico.md)) | Bloqueado | Opcional, baja prioridad |
 | 5 | El *brief* original del proyecto | Casos reales del parser | Reconstruido ([ADR 0007](docs/adr/0007-datos-sinteticos-reconstruccion.md)) | Opcional |
 
-### 1. PROFECO: precios de mercado (lo más importante)
+### 1. PROFECO: precios de mercado (cargado el 18/11)
+
+**Estado:** el CSV `b07_2026_q2.csv` ya está en bronze y alimenta P2. **Cobertura: 16 al 31 de julio de 2026** (semanas ISO 29 a 31), registrada en `registro_ejecuciones`. El cilantro va por manojo. Para ampliar, cargar más quincenas (runbook §9). Lo que sigue describe cómo conseguirlas.
 
 **Qué es:** el programa *Quién es quién en los precios*, publicado en datos.gob.mx como un CSV por quincena. Es la única fuente de mercado
 del proyecto (menudeo y, con las filas de Central de Abasto, mayoreo). SNIIM se descartó ([ADR 0011](docs/adr/0011-ingesta-hibrida-profeco-sniim.md)).
@@ -183,7 +185,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 1.1 | ✅ | Generador sintético con semilla fija (chat, receta, ventas) con errores intencionales | D |
 | 1.2 | ✅ | Parser del chat de WhatsApp con pruebas | D |
 | 1.3 | ✅ | Lambda de Banxico: idempotente, sin reescribir si no cambió, token en Parameter Store | D |
-| 1.4 | ⬜ | PROFECO: **bajar a mano** al menos `b07_2026_q2.csv` (idealmente julio y junio) y cargarlos a bronze como `raw/profeco/csv/bMM_AAAA_qN.csv`. Pasos en «Datos que faltan §1» | D |
+| 1.4 | 🔶 | PROFECO: `b07_2026_q2.csv` cargado a bronze (`raw/profeco/fecha_ingesta=2026-11-18/`). Falta bajar más quincenas (junio y la primera de julio) para ampliar P2 | Cualquiera |
 | 1.5 | ✅ | Buckets silver, gold, cuarentena y artefactos | D |
 | 1.6 | ⬜ | Lambda de INEGI (se descarta por ahora, ADR 0018; solo contrastaría el INPC). Ver «Datos que faltan §2» | X |
 | 1.7 | ✅ | Inflación de alimentos: `SP66540` (Alimentos, Bebidas y Tabaco) y `SP56386` (Pecuarios), automática por la API; desplegada y verificada en Athena el 18/11 | D |
@@ -192,10 +194,10 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 
 | # | Estado | Tarea | Prio |
 | :---- | :---- | :---- | :---- |
-| 2.1 | 🔶 | Silver desplegado para chat, INPC y receta; falta PROFECO | D |
-| 2.2 | ⬜ | Resolver duplicados de PROFECO (~11 k combinaciones repetidas por quincena) | D |
-| 2.2b | ⬜ | Leer los CSV de PROFECO (223 MB) por partes sin exceder memoria ni tiempo de Lambda | D |
-| 2.3 | 🔶 | Reglas de calidad hechas para chat, INPC y receta ([ADR 0016](docs/adr/0016-reglas-y-umbrales-de-calidad.md)); falta aplicarlas a PROFECO | D |
+| 2.1 | ✅ | Silver desplegado para chat, INPC, receta y PROFECO | D |
+| 2.2 | ✅ | Duplicados de PROFECO: una fila por tienda, producto y día; si difieren, la mediana ([ADR 0021](docs/adr/0021-reglas-silver-profeco.md)) | D |
+| 2.2b | ✅ | CSV de 220 MB leído por bloques de 8 MB: 57 s en AWS de punta a punta, con silver a 1 GB y 240 s | D |
+| 2.3 | ✅ | Reglas de calidad para chat, INPC, receta y PROFECO ([ADR 0016](docs/adr/0016-reglas-y-umbrales-de-calidad.md), [0021](docs/adr/0021-reglas-silver-profeco.md)) | D |
 | 2.4 | ✅ | Glue Data Catalog (DDL manual, partition projection) y Athena | D |
 | 2.5 | ✅ | Comparación de bytes escaneados CSV vs Parquet medida el 18/11: 98 % a 100 % menos con Parquet ([`docs/parquet-vs-csv.md`](docs/parquet-vs-csv.md)). Repetir con una quincena real de PROFECO | D |
 
@@ -205,10 +207,10 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | :---- | :---- | :---- | :---- |
 | 3.0 | ✅ | Salsa y merma decididas (ADR 0005 y 0008) | D |
 | 3.1 | ✅ | `costo_taco_semanal` e índice base 100 | D |
-| 3.2 | 🔶 | `precio_insumo_semanal` (proveedor) hecho; falta `comparativo_proveedor` (P2) | D |
+| 3.2 | ✅ | `precio_insumo_semanal` (proveedor y mercado, por kg o manojo) y `comparativo_proveedor` (P2), desplegados; en Athena igual al snapshot (9 filas) | D |
 | 3.3 | ✅ | `comparativo_inflacion` con INPC general, alimentos y pecuarios (misma base 100); en Athena coincide con el snapshot | D |
 | 3.4 | ✅ | `contribucion_insumo` (P3) con "sin dato", **desplegada el 18/11**; en Athena coincide fila por fila con el snapshot (33 filas). Falta completarla con más insumos cuando haya PROFECO | D |
-| 3.5 | 🔶 | SQL de P1, P3 y P4 en `sql/`; falta P2 | D |
+| 3.5 | ✅ | SQL de P1, P2, P3 y P4 en `sql/` | D |
 | 3.6 | 🔶 | Reproducibilidad: silver y gold son idempotentes; falta la prueba explícita desde bronze | D |
 | 3.7 | ✅ | Sensibilidad con merma (versión aparte para el pastor) | S |
 

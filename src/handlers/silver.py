@@ -1,4 +1,4 @@
-"""Lambda de silver: lee de bronze el chat, el INPC de Banxico y la receta, y escribe silver y cuarentena.
+"""Lambda de silver: lee de bronze el chat, el INPC de Banxico, la receta y (si hay) los CSV de PROFECO, y escribe silver y cuarentena.
 
 Evento opcional: {"fecha_ingesta": "AAAA-MM-DD", "ejecucion_id": "...", "simular_falla": true}.
 Banxico puede traer varias series (SP1 es obligatoria); se combinan en una sola tabla.
@@ -14,7 +14,7 @@ import re
 from datetime import date, datetime, timezone
 
 from handlers.comun import UMBRAL_REZAGO_DIAS, revisar_simulacion, ultima_fecha
-from transformacion import silver_chat, silver_inpc, silver_receta
+from transformacion import silver_chat, silver_inpc, silver_mercado, silver_receta
 from transformacion.almacen import AlmacenS3
 from transformacion.comun import UMBRAL_CUARENTENA
 
@@ -26,6 +26,16 @@ def series_en_bronze(bronze) -> list[str]:
     """Series de Banxico que tienen datos en bronze (`raw/banxico/<serie>/fecha_ingesta=.../<serie>_datos.json`)."""
     return sorted({m.group(1) for llave in bronze.listar("raw/banxico/")
                    if (m := re.match(r"raw/banxico/([^/]+)/fecha_ingesta=[^/]+/\1_datos\.json$", llave))})
+
+
+def csv_profeco_en_bronze(bronze, hasta: date) -> list[tuple[date, str]]:
+    """CSV de PROFECO (`raw/profeco/fecha_ingesta=.../*.csv`) con fecha <= `hasta`, ordenados; todos se combinan (silver reemplaza la tabla completa)."""
+    salida = []
+    for llave in bronze.listar("raw/profeco/"):
+        m = re.match(r"raw/profeco/fecha_ingesta=(\d{4}-\d{2}-\d{2})/[^/]+\.csv$", llave)
+        if m and date.fromisoformat(m.group(1)) <= hasta:
+            salida.append((date.fromisoformat(m.group(1)), llave))
+    return sorted(salida)
 
 
 def fecha_del_evento(event: dict) -> date:
@@ -68,6 +78,12 @@ def handler(event, context, s3=None) -> dict:
     silver_receta.escribir(receta, silver, cuarentena)
 
     fuentes = {"chat": chat.resumen, "banxico": inpc.resumen, "receta": receta.resumen}
+    profeco_fechas = csv_profeco_en_bronze(bronze, fecha)
+    if profeco_fechas:  # opcional (ADR 0020): se carga a mano; si no hay CSV, P2 simplemente queda sin mercado
+        mercado = silver_mercado.combinar([
+            silver_mercado.procesar_profeco(bronze.abrir(llave), llave.rsplit("/", 1)[-1], f, ejecucion) for f, llave in profeco_fechas])
+        silver_mercado.escribir(mercado, silver, cuarentena)
+        fuentes["profeco"] = mercado.resumen
     alertas = [f"{n}: cuarentena de {r['proporcion_cuarentena']:.0%} (umbral {UMBRAL_CUARENTENA:.0%})"
                for n, r in fuentes.items() if r["alerta_cuarentena"]]
     atrasos = [("chat", f_chat)] + [(f"banxico: {s}", f) for s, f in sorted(fechas_series.items())]  # la receta casi no cambia: no cuenta
@@ -78,4 +94,5 @@ def handler(event, context, s3=None) -> dict:
                            else f"{nombre}: datos de hace {dias} dias (mas de {UMBRAL_REZAGO_DIAS})")
     return {"etapa": "silver", "fecha_ingesta": str(fecha), "ejecucion_id": ejecucion, "fuentes": fuentes, "alertas": alertas,
             "fechas_origen": {"chat": str(f_chat), "banxico": str(min(fechas_series.values())), "receta": str(f_receta)},
+            "cobertura_profeco": ({"desde": fuentes["profeco"]["fecha_min"], "hasta": fuentes["profeco"]["fecha_max"]} if "profeco" in fuentes else None),
             "fechas_series_banxico": {s: str(f) for s, f in sorted(fechas_series.items())}}

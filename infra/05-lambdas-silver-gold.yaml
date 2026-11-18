@@ -50,13 +50,16 @@ Resources:
                   - !Sub
                     - "${B}/raw/interno/*"
                     - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-bronze-bucket-arn" }
+                  - !Sub
+                    - "${B}/raw/profeco/*"
+                    - B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-bronze-bucket-arn" }
               - Effect: Allow
                 # Sin ListBucket, un archivo que falta daria 403 en vez de NoSuchKey
                 Action: s3:ListBucket
                 Resource: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-bronze-bucket-arn" }
                 Condition:
                   StringLike:
-                    "s3:prefix": ["raw/chat/*", "raw/banxico/*", "raw/interno/*"]
+                    "s3:prefix": ["raw/chat/*", "raw/banxico/*", "raw/interno/*", "raw/profeco/*"]
               - Effect: Allow
                 Action: [s3:PutObject, s3:DeleteObject]
                 Resource: !Sub
@@ -123,8 +126,8 @@ Resources:
       Runtime: python3.13
       Handler: handlers.silver.handler
       Role: !GetAtt SilverFunctionRole.Arn
-      Timeout: 120
-      MemorySize: 512
+      Timeout: 240
+      MemorySize: 1024
       Layers: [!Ref PandasLayerArn]
       Environment:
         Variables:
