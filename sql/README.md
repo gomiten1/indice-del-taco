@@ -18,16 +18,22 @@ se declaran en `infra/06-glue-athena.yaml` (DDL manual, sin crawlers; las partic
 
 ## P4: ¿Sube más o menos que la inflación? (`p4_vs_inflacion.sql`)
 
-| mes | índice del taco | INPC general | brecha (pp) |
-| ----: | ----: | ----: | ----: |
-| ene | 100.00 | 100.00 | 0.00 |
-| mar | 100.72 | 101.36 | -0.64 |
-| abr | 108.70 | 101.56 | +7.13 |
-| sep | 112.32 | 101.73 | +10.59 |
+Índice del taco de pastor (base 100 en enero) contra tres referencias de Banxico, con la misma base:
 
-**Lectura:** de enero a septiembre la carne del pastor subió ~12.3 % y el INPC general ~1.7 %, así que el taco se encareció
-~10.6 puntos más que la inflación. El salto está en abril (+8 % en un mes). Esto **no** respalda el "30 %" que menciona la
-dueña (A1): el dato del proveedor da ≈12 %.
+| mes | taco | INPC general | alimentos | pecuarios | brecha contra el INPC (pp) |
+| ----: | ----: | ----: | ----: | ----: | ----: |
+| ene | 100.00 | 100.00 | 100.00 | 100.00 | 0.00 |
+| mar | 100.72 | 101.36 | 100.71 | 99.19 | -0.64 |
+| abr | 108.70 | 101.56 | 100.89 | 98.02 | +7.13 |
+| jul | 110.87 | 101.10 | 101.69 | 96.28 | +9.77 |
+| sep | 112.32 | 101.73 | 101.97 | 97.41 | +10.59 |
+
+**Lectura:** de enero a septiembre la carne del taco de pastor subió ~12.3 %, mientras el INPC general subió ~1.7 %, los **alimentos procesados** ~2.0 % y los **pecuarios** *bajaron* ~2.6 %.
+El taco se encareció unos 10.6 puntos más que la inflación general, y mucho más que los alimentos. El salto está en abril (+8 % en un mes).
+Esto **no** respalda el «30 %» que menciona la dueña (A1): el dato del proveedor da ≈ 12 %.
+
+**Cómo leer las dos columnas nuevas:** «Alimentos» (`SP66540`) es del índice *subyacente*: productos procesados, **sin** frutas, verduras ni carne fresca.
+«Pecuarios» (`SP56386`) es *no subyacente*, más volátil. Ninguna es «toda la comida». Si una serie falta, su columna sale vacía (sin dato), nunca en cero.
 
 ## P3: ¿Qué insumo explica el aumento de costos? (`p3_contribucion.sql`)
 
@@ -46,4 +52,3 @@ Escanea menos de 1 KB.
 
 ## Pendientes
 - **P2** (proveedor contra el mercado) necesita los precios de PROFECO, y **P3** solo será informativa con más de un insumo.
-- La inflación de alimentos (N4) falta: hay que encontrar la serie (tarea 1.7 del roadmap).

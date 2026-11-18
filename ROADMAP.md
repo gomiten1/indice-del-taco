@@ -40,7 +40,7 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | Qué | Nota |
 | :---- | :---- |
 | **P2 y P3 completos** | Necesitan los CSV de PROFECO, que hay que bajar a mano: ver [Datos que faltan, §1](#1-profeco-precios-de-mercado-lo-más-importante) |
-| Inflación de alimentos (N4) | Claves ya encontradas ([ADR 0018](docs/adr/0018-inflacion-con-banxico.md)); falta implementarla |
+| ~~Inflación de alimentos (N4)~~ | **Hecha el 18/11** (`SP66540` y `SP56386`, automática por la API) |
 | Script de despliegue | Reemplazar los comandos sueltos por uno reproducible y unificar plantillas (00 a 07) |
 | CI en GitHub | `pytest` y `cfn-lint` en cada PR (el CD con OIDC se decide después) |
 | Imagen del diagrama | La de Diagramon sigue mostrando una VPC y eventos de S3; el diagrama vigente es el del README |
@@ -72,7 +72,7 @@ Lo que más limita hoy al proyecto no es código sino **datos**. Esta es la list
 | # | Dato | Desbloquea | Estado hoy | Quién y cuánto cuesta |
 | :---- | :---- | :---- | :---- | :---- |
 | 1 | **Precios de PROFECO** (CSV de CDMX) | **P2**, P3 completa, N2 y N3 | Ninguno cargado: `raw/profeco/` está vacío en bronze | Cualquiera con navegador, ~30 min |
-| 2 | ~~Serie de inflación de alimentos~~ **Resuelta** | **N4** completa | Claves encontradas (`SP66540`, `SP56386`); falta implementarla | Yo; no requiere nada del equipo |
+| 2 | ~~Serie de inflación de alimentos~~ **Hecha** | N4 completa | **Implementada y desplegada el 18/11**, automática por la API de Banxico | Nadie: ya está |
 | 3 | Datos reales del cliente (receta completa, chat real, ventas) y respuestas a las aclaraciones | Costo completo, N7, N8 | Solo hay datos sintéticos y supuestos | Líder, con Doña Ofelia o Diego |
 | 4 | ID del INPC en INEGI | Contraste del INPC (opcional, [ADR 0018](docs/adr/0018-inflacion-con-banxico.md)) | Bloqueado | Opcional, baja prioridad |
 | 5 | El *brief* original del proyecto | Casos reales del parser | Reconstruido ([ADR 0007](docs/adr/0007-datos-sinteticos-reconstruccion.md)) | Opcional |
@@ -124,22 +124,21 @@ con un archivo real, la **repetición de la prueba Parquet contra CSV** ([`docs/
 **Límites a tener presentes:** PROFECO es quincenal y gold es semanal (se agrupa por `fecha_registro`); la muestra de mayoreo en Central de Abasto es pequeña
 (tortilla 2 filas, cilantro 1 en esa quincena); no hay pastor ni suadero, solo proxies.
 
-### 2. Inflación de alimentos (Banxico): ya se encontraron las claves
+### 2. Inflación de alimentos (Banxico): resuelta y automática
 
-**Resuelto el 18/11.** El sitio del SIE usa endpoints de catálogo que no están en la documentación (incluida una **búsqueda por texto** sin token), y con ellos salieron las claves,
-comprobadas contra un CSV del SIE (538 meses, sin diferencias). Detalle y la tabla completa en [`docs/fuentes.md`](docs/fuentes.md#catálogo-del-sie-y-claves-de-la-inflación-18112026).
+**Hecho el 18/11.** El sitio del SIE usa endpoints de catálogo que no están en la documentación (incluida una **búsqueda por texto** sin token); con ellos salieron las claves,
+comprobadas contra un CSV del SIE (538 meses, sin diferencias). Detalle en [`docs/fuentes.md`](docs/fuentes.md#catálogo-del-sie-y-claves-de-la-inflación-18112026).
 
-| Serie | Clave |
-| :---- | :---- |
-| **Alimentos, Bebidas y Tabaco** (subyacente; productos procesados) | **`SP66540`** |
-| **Pecuarios** (no subyacente; el más cercano a la carne) | **`SP56386`** |
-| Agropecuarios / Frutas y verduras | `SP56337` / `SP56385` |
+| Serie | Clave | En el pipeline |
+| :---- | :---- | :---- |
+| INPC general | `SP1` | Obligatoria (base de P4) |
+| **Alimentos, Bebidas y Tabaco** (subyacente: productos procesados) | **`SP66540`** | `inpc_alimentos_base100` |
+| **Pecuarios** (no subyacente: el más cercano a la carne) | **`SP56386`** | `inpc_pecuarios_base100` |
 
-**Lo que falta (lo hago yo, no necesita datos tuyos):** que la Lambda de Banxico traiga varias series (ya acepta `BANXICO_SERIES`), que silver las lea todas, y que gold llene
-`inpc_alimentos_base100` (y agregue una columna de pecuarios) con la misma base que el índice del taco; con sus pruebas, la columna en Athena y el despliegue. Cierra N4 y es **automático**, sin descargar nada.
+La Lambda de Banxico trae las tres cada lunes, silver las combina (los meses `N/E`, sin dato, se omiten sin error) y gold las rebasa al mismo mes base que el índice del taco.
+Resultado, enero a septiembre: taco **+12.3 %**, INPC general +1.7 %, alimentos +2.0 %, pecuarios **−2.6 %** ([`sql/README.md`](sql/README.md)).
 
-**INEGI (opcional, ya sin urgencia):** solo serviría para contrastar el INPC de Banxico, y la inflación de alimentos ya no depende de él ([ADR 0018](docs/adr/0018-inflacion-con-banxico.md)).
-Si alguien quiere intentarlo: el *Constructor de consultas* de la guía oficial (<https://www.inegi.org.mx/servicios/api_indicadores.html>); ver `docs/fuentes.md`.
+**INEGI (opcional, sin urgencia):** solo serviría para contrastar el INPC de Banxico; la inflación de alimentos ya no depende de él ([ADR 0018](docs/adr/0018-inflacion-con-banxico.md)).
 
 ### 3. Datos reales del cliente y aclaraciones
 
@@ -187,7 +186,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 1.4 | ⬜ | PROFECO: **bajar a mano** al menos `b07_2026_q2.csv` (idealmente julio y junio) y cargarlos a bronze como `raw/profeco/csv/bMM_AAAA_qN.csv`. Pasos en «Datos que faltan §1» | D |
 | 1.5 | ✅ | Buckets silver, gold, cuarentena y artefactos | D |
 | 1.6 | ⬜ | Lambda de INEGI (se descarta por ahora, ADR 0018; solo contrastaría el INPC). Ver «Datos que faltan §2» | X |
-| 1.7 | 🔶 | Inflación de alimentos: **claves encontradas** (`SP66540` Alimentos, Bebidas y Tabaco; `SP56386` Pecuarios) en el catálogo del SIE. Falta implementarla (varias series en Banxico, silver y gold) | D |
+| 1.7 | ✅ | Inflación de alimentos: `SP66540` (Alimentos, Bebidas y Tabaco) y `SP56386` (Pecuarios), automática por la API; desplegada y verificada en Athena el 18/11 | D |
 
 ### Fase 2 · Silver y calidad
 
@@ -207,7 +206,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 3.0 | ✅ | Salsa y merma decididas (ADR 0005 y 0008) | D |
 | 3.1 | ✅ | `costo_taco_semanal` e índice base 100 | D |
 | 3.2 | 🔶 | `precio_insumo_semanal` (proveedor) hecho; falta `comparativo_proveedor` (P2) | D |
-| 3.3 | 🔶 | `comparativo_inflacion` con INPC general; falta alimentos | D |
+| 3.3 | ✅ | `comparativo_inflacion` con INPC general, alimentos y pecuarios (misma base 100); en Athena coincide con el snapshot | D |
 | 3.4 | ✅ | `contribucion_insumo` (P3) con "sin dato", **desplegada el 18/11**; en Athena coincide fila por fila con el snapshot (33 filas). Falta completarla con más insumos cuando haya PROFECO | D |
 | 3.5 | 🔶 | SQL de P1, P3 y P4 en `sql/`; falta P2 | D |
 | 3.6 | 🔶 | Reproducibilidad: silver y gold son idempotentes; falta la prueba explícita desde bronze | D |
@@ -266,7 +265,7 @@ Si el 24/11 no están cerradas las fases 1 a 3, se recorta en este orden:
 | PROFECO sigue dando 403 o no funciona desde AWS | Carga manual de una o dos quincenas ([ADR 0011](docs/adr/0011-ingesta-hibrida-profeco-sniim.md)); probar la descarga desde AWS |
 | Mayoreo (N2) con muestra mínima (tortilla 2 filas, cilantro 1) | Marcar la comparación como aproximada y mostrar "sin dato" |
 | CSV de PROFECO de 223 MB exceden memoria o tiempo de Lambda (límite del orquestador: 300 s) | Leer por partes y filtrar al leer (2.2b); si crece, Step Functions |
-| Inflación de alimentos: la serie existe y está identificada | Implementarla (tarea 1.7); la parte de alimentos de N4 ya no depende de datos externos |
+| ~~Inflación de alimentos no disponible~~ | Resuelto (tarea 1.7) |
 | Con datos reales el snapshot revela el precio de compra | Revisar el ADR 0012 antes de publicar (redondear, mostrar solo índice o publicar con retraso) |
 | Todo vive en la cuenta personal de una persona | Plantillas y script de despliegue para recrearlo en otra cuenta (ADR 0010) |
 | Dependencias de cliente (A1 a A6) y aprobaciones de la dueña sin responder | Se trabaja con los supuestos provisionales y el dashboard los declara |

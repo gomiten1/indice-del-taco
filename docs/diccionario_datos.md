@@ -60,11 +60,11 @@ Origen: PROFECO QQP (filtrado a CDMX). Llave: (`producto_original`, `presentacio
 | `fecha_ingesta` | date | |
 
 ### `silver_inpc`
-Origen: Banxico (`SP1`, INPC general). Llave: (`serie_id`, `fecha`). Partición: `anio`.
+Origen: Banxico, varias series en la misma tabla: `SP1` (INPC general, obligatoria), `SP66540` (Alimentos, Bebidas y Tabaco) y `SP56386` (Pecuarios). Llave: (`serie_id`, `fecha`). Partición: `anio`. Los meses que Banxico marca `N/E` (la serie no existe todavía) se **omiten**: no son error ni van a cuarentena.
 
 | Columna | Tipo | Descripción |
 | :---- | :---- | :---- |
-| `serie_id` | string | `SP1` (general). La serie de alimentos es *pendiente* (tarea 1.7) |
+| `serie_id` | string | Clave de la serie de Banxico: `SP1`, `SP66540` o `SP56386` (ver `docs/fuentes.md`) |
 | `fecha` | date | Primer día del mes |
 | `indice` | decimal(12,6) | Valor del índice (Banxico lo entrega como texto) |
 | `fecha_ingesta` | date | |
@@ -159,7 +159,8 @@ Llave: (`anio`, `mes`, `tipo_taco`). Mensual por la frecuencia del INPC. **Públ
 | `tipo_taco` | string | `suadero` o `pastor` (versión base, sin merma) |
 | `indice_taco_base100` | decimal(8,2) | Índice del taco, mensualizado |
 | `inpc_general_base100` | decimal(8,2) | Misma base 100 |
-| `inpc_alimentos_base100` | decimal(8,2) | Nulo hasta resolver la serie de alimentos (tarea 1.7) |
+| `inpc_alimentos_base100` | decimal(8,2) | `SP66540`, Alimentos, Bebidas y Tabaco (subyacente: productos procesados), con la misma base. Nulo si falta la serie o el mes base |
+| `inpc_pecuarios_base100` | decimal(8,2) | `SP56386`, Pecuarios (no subyacente, más volátil), con la misma base. Nulo si falta |
 | `base_mes` | date | Mes que vale 100 |
 
 ### `contribucion_insumo` (P3)

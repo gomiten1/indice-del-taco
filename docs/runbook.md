@@ -118,3 +118,20 @@ Qué debe pasar:
 4. Gold **no** se actualiza (la corrida se detiene en la etapa que falla).
 
 Se acepta una falla simulada en `ingesta`, `silver` o `gold`. Después de la prueba, relanzar el orquestador sin parámetros para dejar los datos al día.
+
+---
+
+## 8. Agregar o cambiar una serie de Banxico
+
+Hoy se traen tres series: `SP1` (INPC general, **obligatoria**), `SP66540` (Alimentos, Bebidas y Tabaco) y `SP56386` (Pecuarios).
+
+1. **Buscar la clave** con el catálogo del SIE (no necesita token), por ejemplo:
+   ```bash
+   curl -G -H "Accept: application/json" --data-urlencode "q=texto a buscar" https://www.banxico.org.mx/SieAPIRest/service/v1/cat/series
+   ```
+   y comprobarla con `.../series/SPxxxxx` (ver `docs/fuentes.md`).
+2. **Traerla a bronze:** agregarla al parámetro `BanxicoSeries` del stack `indice-taco-banxico` (lista separada por comas) y actualizar el stack. Silver descubre solo las series que haya en bronze.
+3. **Usarla en gold:** si debe salir en un indicador nuevo, hay que agregar una columna en `gold.py`, en `infra/06` y en el diccionario de datos (hoy las constantes son `SERIE_GENERAL`, `SERIE_ALIMENTOS` y `SERIE_PECUARIOS`).
+
+**Dos cosas que no son error:** los meses que Banxico marca `N/E` («no existe») se omiten sin ir a cuarentena (en estas series son los de 1969 a 1981), y una serie opcional sin archivos
+simplemente no aparece (su columna en gold queda vacía). Solo `SP1` es obligatoria: sin ella la etapa `silver` falla.
