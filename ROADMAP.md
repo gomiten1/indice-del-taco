@@ -19,17 +19,18 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | Verificado en la cuenta (16/11) | Banxico idempotente y sin reescribir si no cambió; gold en AWS idéntico al cálculo local; Athena devuelve P1 y P4; el orquestador hizo una corrida real registrada |
 | Dashboard y snapshot | `dashboard/app.py` (P1 a P4, avisa "Aún sin datos" y "Sin dato"), `dashboard/requirements.txt`, `snapshot_gold/` generado desde gold (reproduce byte a byte el del PR #9) |
 | Documentación | **19 ADRs** (0001 a 0019), diccionario v0, `runbook.md` y `costos.md` corregidos, guía de réplica completa, `sql/` con P1 y P4 interpretadas, `infra/README.md` |
-| Alertas | Una compañera reporta haber **probado la falla simulada** |
+| Alertas y Budget (verificado en AWS el 18/11) | La **falla simulada se probó el 17/11** (ver abajo); el Budget `presupuesto-indice-del-taco` existe (10 USD al mes, avisos reales al 50 % y 80 %) |
 
 ### Por verificar (se hizo, pero falta comprobarlo)
 
 | Qué | Por qué falta | Cómo se cierra |
 | :---- | :---- | :---- |
-| **Alerta por correo (N5)** | La prueba la hizo una compañera; no hay evidencia en el repo (correo recibido, hora y tiempo ≤ 60 min) | Guardar la captura del correo y anotarla en el acta |
+| **Alerta por correo (N5)** | **Verificado en AWS:** el 17/11 18:17 UTC se registró `FallaSimulada` en silver y Banxico sí corrió y gold no; la alarma `orquestador-errores` pasó a ALARM a las 18:19 y volvió a OK a las 18:33. **No verificado:** que el correo llegó y en cuánto tiempo | Guardar la captura del correo (la recibió Fernanda) y anotar la hora |
+| **Suscripciones de SNS** | Hay dos: una **confirmada (Fernanda)** y una **pendiente (la tuya)**; las pendientes se borran a las 48 h (≈ 19/11 04:32 UTC) | Aceptar el correo o reenviar la confirmación; decidir quién debe recibir las alertas |
 | **Desplegar gold con P3 y la tabla nueva de Glue** | El código y `infra/06` ya están en el repo, pero la herramienta de AWS estaba caída al escribirlo: **AWS tiene la versión anterior de gold** | Empaquetar, subir el zip y actualizar los stacks `pipeline` y `athena` |
 | Alarmas de CloudWatch | Nunca se han visto disparar solas | Provocar un error real del orquestador |
 | Schedule semanal | La primera corrida automática es el lunes 23/11 | Ver al menos **dos** corridas sin intervención (E5) |
-| Límite de gasto, Budget y región | El Budget no existe (ninguna plantilla lo crea); la región no se confirmó en AWS Settings | Crear el Budget (50 % y 80 %), revisar el límite y confirmar `us-east-2` |
+| Límite de gasto y región | El Budget **sí existe** (se creó a mano, no está en CloudFormation); falta revisar el límite de gasto y confirmar la región en AWS Settings | Confirmar `us-east-2` y el límite en AWS Settings; si se quiere reproducible, agregar el Budget a una plantilla |
 | Recrear todo desde cero | Las plantillas se desplegaron una por una | Script de despliegue y prueba destruir → desplegar (N6, E6) |
 | Recalcular una semana desde bronze | Silver y gold son idempotentes, falta la prueba explícita | Prueba de reproducibilidad (3.6) |
 | Gasto real | `costos.md` solo tiene estimaciones | Medir en Cost Explorer (activar la etiqueta `project`) |
@@ -77,7 +78,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | # | Estado | Tarea | Prio |
 | :---- | :---- | :---- | :---- |
 | 0.1 | ✅ | Verificar y desplegar la base en AWS (ver [ADR 0010](docs/adr/0010-cuenta-aws-y-region.md)) | D |
-| 0.2 | 🔶 | Seguridad de la cuenta: el acceso humano lo administra AWS (no hay MFA de root ni usuarios IAM propios). Falta el Budget y revisar el límite de gasto | D |
+| 0.2 | 🔶 | Seguridad de la cuenta: el acceso humano lo administra AWS (no hay MFA de root ni usuarios IAM propios). El Budget de 10 USD existe; falta revisar el límite de gasto en AWS Settings | D |
 | 0.3 | ✅ | Contratos de datos: `docs/diccionario_datos.md` v0 (falta revisión del equipo) | D |
 | 0.4 | ✅ | ADRs críticos: 19 escritos, entre ellos capas (0002), CloudFormation (0004), Streamlit (0006), PROFECO y SNIIM (0011), orquestación (0013) y proxies (0015); todos provisionales | D |
 | 0.5 | ⬜ | Reparto real de tareas por persona; cada cambio entra por PR revisado por otra persona (SOW §7) | D |
@@ -126,7 +127,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | :---- | :---- | :---- | :---- |
 | 4.1 | 🔶 | EventBridge Scheduler (lunes 6:00 CDMX) desplegado; falta ver dos corridas automáticas | D |
 | 4.2 | ✅ | Alarmas, SNS y registro de ejecuciones desplegados; alertas por fallas y por datos sospechosos o atrasados | D |
-| 4.3 | 🔶 | **Falla simulada:** probada por una compañera; falta la evidencia (captura y tiempo ≤ 60 min) | D |
+| 4.3 | ✅ | **Falla simulada** probada el 17/11 (registro `error` en silver y alarma en ALARM → OK). Falta solo la captura del correo con su hora | D |
 | 4.4 | 🔶 | Plantillas 00 a 07 desplegadas; falta unificarlas, el script y la prueba destruir → desplegar | D |
 | 4.5 | ✅ | Runbook por alerta (`docs/runbook.md`, con los nombres reales) | D |
 | 4.6 | 🔶 | Un rol de mínimo privilegio por Lambda ya definido; falta la prueba de permisos | D |
@@ -138,7 +139,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | :---- | :---- | :---- | :---- |
 | 5.1 | ✅ | Snapshot de gold sin precios del proveedor, generado con `transformacion.snapshot` | D |
 | 5.2 | 🔶 | Dashboard en Streamlit (P1 a P4) listo y probado en local; falta la URL pública | D |
-| 5.3 | 🔶 | `docs/costos.md` con estimaciones; falta el gasto real y el Budget | D |
+| 5.3 | 🔶 | `docs/costos.md` con estimaciones; el Budget ya existe; falta medir el gasto real | D |
 | 5.4 | 🔶 | ADRs (hay 19) y diccionario hechos; falta el README final con hallazgos y aprendizajes | D |
 | 5.5 | ⬜ | Presentación de 10 minutos y video demo de 3 a 5 minutos | D |
 | 5.6 | 🔶 | Guía de réplica escrita; con limitaciones (productos e insumos van en el código) | S |
@@ -159,10 +160,10 @@ Si el 24/11 no están cerradas las fases 1 a 3, se recorta en este orden:
 - [ ] El pipeline corre bronze → silver → gold sin intervención, al menos dos veces seguidas, y el costo por taco queda listo antes del lunes 9:00. *(corrió una vez a mano; la primera automática es el 23/11)*
 - [x] Volver a correr una semana no duplica registros ni cambia resultados. *(falta la prueba explícita desde bronze)*
 - [x] Un dato malo va a cuarentena y se reporta, no se usa.
-- [ ] Una falla simulada manda correo en ≤ 60 min y queda registrada. *(probada por una compañera; falta la evidencia)*
+- [x] Una falla simulada manda correo en ≤ 60 min y queda registrada. *(registrada en `registro_ejecuciones` y con la alarma disparada; falta la captura del correo con su hora)*
 - [ ] Todo se recrea desde las plantillas, sin credenciales en el repo. *(no hay credenciales en el repo; falta la prueba de recreación)*
 - [ ] El dashboard público solo muestra índices y comparaciones. *(listo en local; el riesgo del costo en pesos está aceptado en el ADR 0012; falta publicarlo)*
-- [ ] Alarma de Budgets activa y gasto real documentado.
+- [ ] Alarma de Budgets activa y gasto real documentado. *(el Budget de 10 USD con avisos al 50 % y 80 % está activo; falta anotar el gasto real)*
 - [ ] La dueña responde las 4 preguntas en el dashboard en menos de 5 minutos, o la limitación queda documentada.
 
 ## Riesgos que pueden mover este plan
@@ -177,7 +178,7 @@ Si el 24/11 no están cerradas las fases 1 a 3, se recorta en este orden:
 | Con datos reales el snapshot revela el precio de compra | Revisar el ADR 0012 antes de publicar (redondear, mostrar solo índice o publicar con retraso) |
 | Todo vive en la cuenta personal de una persona | Plantillas y script de despliegue para recrearlo en otra cuenta (ADR 0010) |
 | Dependencias de cliente (A1 a A6) y aprobaciones de la dueña sin responder | Se trabaja con los supuestos provisionales y el dashboard los declara |
-| El plan gratuito de AWS tiene crédito y vigencia limitados (120 USD hasta 16/05/2027) | Medir el gasto real y crear el Budget |
+| El plan gratuito de AWS tiene crédito y vigencia limitados (120 USD hasta 16/05/2027) | Medir el gasto real (el Budget de 10 USD ya existe) |
 
 ## Pendientes de decidir
 

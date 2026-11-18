@@ -172,13 +172,13 @@ Con los datos sintéticos, de enero a septiembre el costo de la carne por taco s
 
 ## Avance
 
-- [ ] H0 · Arranque *(parcial: falta el Budget de AWS)*
+- [ ] H0 · Arranque *(parcial: falta confirmar la región y el límite de gasto en AWS Settings)*
 - [x] H1 · La bodega, a mano
 - [ ] H2 · Ingesta automatizada *(Banxico y chat listos; falta PROFECO)*
 - [ ] H3 · Silver y SQL *(falta PROFECO y la comparación CSV vs Parquet)*
 - [ ] H4 · Gold e Índice del Taco *(P1 y P4 listos; P2 y P3 incompletas)*
 - [ ] H5 · Orquestación *(desplegada; falta ver dos corridas automáticas)*
-- [ ] H6 · Observabilidad y calidad *(alertas probadas por una compañera; falta la evidencia)*
+- [ ] H6 · Observabilidad y calidad *(falla simulada probada el 17/11; falta la captura del correo)*
 - [ ] H7 · Infraestructura como código completa *(plantillas listas; falta el script y destruir → desplegar)*
 - [ ] H8 · Producto y entrega *(dashboard y snapshot listos; faltan URL pública, presentación y video)*
 
