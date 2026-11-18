@@ -20,6 +20,10 @@ class AlmacenLocal:
     def get(self, ruta: str) -> bytes:
         return (self.raiz / ruta).read_bytes()
 
+    def abrir(self, ruta: str):
+        """Flujo de lectura sin cargar todo el archivo en memoria (para los CSV grandes de PROFECO)."""
+        return (self.raiz / ruta).open("rb")
+
     def listar(self, prefijo: str) -> list[str]:
         if not self.raiz.exists():
             return []
@@ -44,6 +48,10 @@ class AlmacenS3:
 
     def get(self, ruta: str) -> bytes:
         return self.s3.get_object(Bucket=self.bucket, Key=ruta)["Body"].read()
+
+    def abrir(self, ruta: str):
+        """Flujo de lectura de S3 sin cargar todo el archivo en memoria (para los CSV grandes de PROFECO)."""
+        return self.s3.get_object(Bucket=self.bucket, Key=ruta)["Body"]
 
     def listar(self, prefijo: str) -> list[str]:
         llaves, token = [], None
