@@ -91,8 +91,9 @@ def test_fecha_mal_formada_falla(handler, s3):
 def test_gold_calcula_y_escribe_las_tablas(s3):
     silver.handler({"fecha_ingesta": FECHA}, None, s3=s3)
     r = gold.handler({}, None, s3=s3)
-    assert r["etapa"] == "gold" and set(r["tablas"]) == {"costo_taco_semanal", "precio_insumo_semanal", "comparativo_inflacion"}
-    assert s3.llaves("gold") == ["comparativo_inflacion/datos.parquet", "costo_taco_semanal/datos.parquet", "precio_insumo_semanal/datos.parquet"]
+    assert r["etapa"] == "gold" and set(r["tablas"]) == {"costo_taco_semanal", "precio_insumo_semanal", "comparativo_inflacion", "contribucion_insumo"}
+    assert s3.llaves("gold") == ["comparativo_inflacion/datos.parquet", "contribucion_insumo/datos.parquet",
+                                 "costo_taco_semanal/datos.parquet", "precio_insumo_semanal/datos.parquet"]
     assert r["tablas"]["costo_taco_semanal"] > 0
 
 

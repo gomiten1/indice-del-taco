@@ -1,12 +1,34 @@
-periodo_evaluado,tipo_taco,insumo,aporte_cambio_pct,ranking
-W01-W39,pastor,pastor,100.0,1
-W01-W39,pastor,tortilla,0.0,2
-W01-W39,pastor,pina,0.0,3
-W01-W39,pastor,cebolla,0.0,4
-W01-W39,pastor,cilantro,0.0,5
-W01-W39,pastor,limon,0.0,6
-W01-W39,suadero,suadero,100.0,1
-W01-W39,suadero,tortilla,0.0,2
-W01-W39,suadero,cebolla,0.0,3
-W01-W39,suadero,cilantro,0.0,4
-W01-W39,suadero,limon,0.0,5
+trimestre,tipo_taco,insumo,aportacion_mxn,aportacion_pct,ranking,estado
+2026Q1,pastor,pastor,0.05,100.00,1,ok
+2026Q1,pastor,tortilla,,,2,sin dato
+2026Q1,pastor,cebolla,,,3,sin dato
+2026Q1,pastor,cilantro,,,4,sin dato
+2026Q1,pastor,limon,,,5,sin dato
+2026Q1,pastor,pina,,,6,sin dato
+2026Q2,pastor,pastor,0.70,100.00,1,ok
+2026Q2,pastor,tortilla,,,2,sin dato
+2026Q2,pastor,cebolla,,,3,sin dato
+2026Q2,pastor,cilantro,,,4,sin dato
+2026Q2,pastor,limon,,,5,sin dato
+2026Q2,pastor,pina,,,6,sin dato
+2026Q3,pastor,pastor,0.10,100.00,1,ok
+2026Q3,pastor,tortilla,,,2,sin dato
+2026Q3,pastor,cebolla,,,3,sin dato
+2026Q3,pastor,cilantro,,,4,sin dato
+2026Q3,pastor,limon,,,5,sin dato
+2026Q3,pastor,pina,,,6,sin dato
+2026Q1,suadero,suadero,0.44,100.00,1,ok
+2026Q1,suadero,tortilla,,,2,sin dato
+2026Q1,suadero,cebolla,,,3,sin dato
+2026Q1,suadero,cilantro,,,4,sin dato
+2026Q1,suadero,limon,,,5,sin dato
+2026Q2,suadero,suadero,0.06,100.00,1,ok
+2026Q2,suadero,tortilla,,,2,sin dato
+2026Q2,suadero,cebolla,,,3,sin dato
+2026Q2,suadero,cilantro,,,4,sin dato
+2026Q2,suadero,limon,,,5,sin dato
+2026Q3,suadero,suadero,0.61,100.00,1,ok
+2026Q3,suadero,tortilla,,,2,sin dato
+2026Q3,suadero,cebolla,,,3,sin dato
+2026Q3,suadero,cilantro,,,4,sin dato
+2026Q3,suadero,limon,,,5,sin dato

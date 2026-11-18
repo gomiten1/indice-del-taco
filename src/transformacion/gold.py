@@ -4,8 +4,9 @@ Contrato: docs/diccionario_datos.md. Decisiones: ADR 0003 (precio del proveedor 
 semana), 0005 (la salsa no entra; el costo cuenta solo los insumos con dato), 0008 (merma solo en pastor, como
 versión aparte) y 0009 (semana base = primera semana con todos los insumos de la receta).
 
-Lógica pura sobre tablas de pyarrow: no sabe de disco ni de S3. Quedan pendientes para cuando haya PROFECO:
-`comparativo_proveedor` (P2) y `contribucion_insumo` (P3).
+Lógica pura sobre tablas de pyarrow: no sabe de disco ni de S3. Queda pendiente `comparativo_proveedor` (P2),
+que necesita los precios de PROFECO. `contribucion_insumo` (P3) ya se calcula, pero los insumos sin precio salen
+como "sin dato" (nunca se inventa un aporte de 0 %).
 """
 from __future__ import annotations
 
@@ -15,6 +16,13 @@ from decimal import ROUND_HALF_UP, Decimal
 import pyarrow as pa
 
 MERMA_PASTOR = Decimal("0.12")  # ADR 0008: parte del trompo que no se vende (≈12 %)
+
+# Insumos que forman cada taco según el SOW (la salsa queda fuera: ADR 0005). Aparecen en P3 aunque no tengan precio,
+# con estado "sin dato", para que se vea qué falta en vez de ocultarlo. Cambia esta lista si cambia el negocio.
+INSUMOS_ESPERADOS = {
+    "pastor": ["pastor", "tortilla", "cebolla", "cilantro", "limon", "pina"],
+    "suadero": ["suadero", "tortilla", "cebolla", "cilantro", "limon"],
+}
 
 ESQUEMA_COSTO = pa.schema([
     ("anio", pa.int32()), ("semana_iso", pa.int32()), ("semana_inicio", pa.date32()), ("tipo_taco", pa.string()),
@@ -27,8 +35,11 @@ ESQUEMA_INFLACION = pa.schema([
     ("anio", pa.int32()), ("mes", pa.int32()), ("tipo_taco", pa.string()),
     ("indice_taco_base100", pa.decimal128(8, 2)), ("inpc_general_base100", pa.decimal128(8, 2)),
     ("inpc_alimentos_base100", pa.decimal128(8, 2)), ("base_mes", pa.date32()), ("brecha_pp", pa.decimal128(8, 2))])
+ESQUEMA_CONTRIBUCION = pa.schema([
+    ("trimestre", pa.string()), ("tipo_taco", pa.string()), ("insumo", pa.string()),
+    ("aportacion_mxn", pa.decimal128(8, 2)), ("aportacion_pct", pa.decimal128(8, 2)), ("ranking", pa.int32()), ("estado", pa.string())])
 TABLAS = {"costo_taco_semanal": ESQUEMA_COSTO, "precio_insumo_semanal": ESQUEMA_PRECIO_INSUMO,
-          "comparativo_inflacion": ESQUEMA_INFLACION}
+          "comparativo_inflacion": ESQUEMA_INFLACION, "contribucion_insumo": ESQUEMA_CONTRIBUCION}
 
 
 def _q(x: Decimal) -> Decimal:
@@ -37,6 +48,11 @@ def _q(x: Decimal) -> Decimal:
 
 def _lunes(d: date) -> date:
     return d - timedelta(days=d.weekday())
+
+
+def _trimestre(lunes: date) -> str:
+    j = lunes + timedelta(days=3)
+    return f"{j.year}Q{(j.month - 1) // 3 + 1}"
 
 
 def _mes_de(lunes: date) -> tuple[int, int]:
@@ -140,6 +156,43 @@ def calcular_gold(precios: pa.Table, receta: pa.Table, inpc: pa.Table | None, se
                 "inpc_general_base100": _q(inpc_idx) if inpc_idx is not None else None, "inpc_alimentos_base100": None,
                 "base_mes": date(*mes_base, 1), "brecha_pp": _q(indice - inpc_idx) if inpc_idx is not None else None})
 
+    filas_contribucion = _contribucion_por_insumo(semanas, por_semana, recetas)
+
     return {"costo_taco_semanal": pa.Table.from_pylist(filas_costo, schema=ESQUEMA_COSTO),
             "precio_insumo_semanal": pa.Table.from_pylist(filas_insumo, schema=ESQUEMA_PRECIO_INSUMO),
-            "comparativo_inflacion": pa.Table.from_pylist(filas_inflacion, schema=ESQUEMA_INFLACION)}
+            "comparativo_inflacion": pa.Table.from_pylist(filas_inflacion, schema=ESQUEMA_INFLACION),
+            "contribucion_insumo": pa.Table.from_pylist(filas_contribucion, schema=ESQUEMA_CONTRIBUCION)}
+
+
+def _contribucion_por_insumo(semanas, por_semana, recetas) -> list[dict]:
+    """P3: cuánto del cambio de costo por taco en cada trimestre explica cada insumo (primera vs. última semana con dato).
+    Los insumos esperados que no tienen precio salen con estado "sin dato"; si el costo no cambió, "sin cambio"."""
+    por_trimestre: dict[str, list[date]] = {}
+    for lunes in semanas:
+        por_trimestre.setdefault(_trimestre(lunes), []).append(lunes)
+    filas = []
+    for tipo, lineas in sorted(recetas.items()):
+        gramos = dict(lineas)
+        insumos = list(gramos) + [i for i in INSUMOS_ESPERADOS.get(tipo, []) if i not in gramos]
+        for trimestre, sem in sorted(por_trimestre.items()):
+            if len(sem) < 2:
+                continue
+            inicio, fin = sem[0], sem[-1]
+            aporte: dict[str, Decimal] = {}
+            for insumo in insumos:
+                a, b = por_semana.get((insumo, inicio)), por_semana.get((insumo, fin))
+                if insumo in gramos and a and b:
+                    aporte[insumo] = Decimal(gramos[insumo]) / Decimal(1000) * (b[0] - a[0])
+            total = sum(aporte.values(), Decimal(0))
+            con_dato = [i for i in insumos if i in aporte]
+            if total != 0:
+                con_dato.sort(key=lambda i: aporte[i] / total, reverse=True)  # mayor parte del cambio primero
+            sin_dato = [i for i in insumos if i not in aporte]
+            for rango, insumo in enumerate(con_dato + sin_dato, start=1):
+                con = insumo in aporte
+                filas.append({
+                    "trimestre": trimestre, "tipo_taco": tipo, "insumo": insumo,
+                    "aportacion_mxn": _q(aporte[insumo]) if con else None,
+                    "aportacion_pct": _q(aporte[insumo] / total * 100) if con and total != 0 else None,
+                    "ranking": rango, "estado": ("ok" if total != 0 else "sin cambio") if con else "sin dato"})
+    return filas

@@ -163,20 +163,24 @@ Llave: (`anio`, `mes`, `tipo_taco`). Mensual por la frecuencia del INPC. **Públ
 | `base_mes` | date | Mes que vale 100 |
 
 ### `contribucion_insumo` (P3)
-Llave: (`trimestre`, `tipo_taco`, `insumo`). **Pública.**
+Llave: (`trimestre`, `tipo_taco`, `insumo`). **Pública.** Cuánto del cambio de costo por taco en el trimestre explica cada insumo
+(primera contra última semana con dato del trimestre; hace falta al menos dos semanas).
 
 | Columna | Tipo | Descripción |
 | :---- | :---- | :---- |
-| `trimestre` | string | `2026Q3` |
+| `trimestre` | string | `2026Q3` (el jueves de la semana decide el trimestre) |
 | `tipo_taco` | string | |
-| `insumo` | string | |
-| `aportacion_mxn` | decimal(8,2) | Cuánto subió el costo por taco por este insumo |
-| `aportacion_pct` | decimal(8,2) | Parte del cambio total |
-| `ranking` | int | 1 = el que más aportó; el dashboard muestra los 3 primeros |
+| `insumo` | string | Los de la receta más los esperados del taco (`INSUMOS_ESPERADOS` en `gold.py`: tortilla, cebolla, cilantro, limón, piña) |
+| `aportacion_mxn` | decimal(8,2) | Cuánto subió (o bajó) el costo por taco por este insumo. Nulo si no hay dato |
+| `aportacion_pct` | decimal(8,2) | Parte del cambio total. Nulo si no hay dato o si el costo no cambió |
+| `ranking` | int | 1 = el que más aportó; los insumos sin dato van al final. El dashboard muestra los 3 primeros |
+| `estado` | string | `ok`, `sin cambio` (el costo no varió) o `sin dato` (no hay precio de ese insumo; **nunca se pone 0 %**, ADR 0019) |
 
 ## Snapshot público
 
-El snapshot que lee el dashboard excluye `precio_proveedor_kg` y las filas de `precio_insumo_semanal` con `fuente = 'proveedor'`. Todo lo demás de gold se publica.
+El snapshot que lee el dashboard (`snapshot_gold/*.csv`) se genera con `python -m transformacion.snapshot` (desde gold local o desde S3) y excluye `precio_proveedor_kg` y las filas de `precio_insumo_semanal` con `fuente = 'proveedor'`. Todo lo demás de gold se publica.
+
+**Riesgo aceptado ([ADR 0012](adr/0012-privacidad-del-snapshot.md)):** con la receta pública, el costo por taco en pesos permite estimar el precio de compra de la carne (por ejemplo $6.90 / 0.05 kg = $138).
 
 ## Pendientes que cambian este contrato
 
