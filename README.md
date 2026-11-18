@@ -2,7 +2,7 @@
 
 Pipeline de datos en AWS que calcula cada semana el costo de insumos de un taco de suadero y de pastor, lo compara contra el mercado y la inflación, y avisa por correo cuando algo falla. Pensado para La TaquerIA Opus y replicable en cualquier negocio de comida en México.
 
-> **Estado:** en construcción. **Funciona de punta a punta en AWS** con datos sintéticos y el INPC de Banxico (bronze → silver → gold → Athena) para P1 y P4; se ejecuta sola cada lunes 6:00 (CDMX) y registra cada corrida; faltan PROFECO (P2 y P3), probar las alertas de punta a punta y el dashboard. Las secciones marcadas con [EN CONSTRUCCIÓN] se completan conforme avanzan los hitos (ver [Avance](#avance)).
+> **Estado (18/11):** funciona de punta a punta en AWS con datos sintéticos y el INPC real de Banxico (bronze → silver → gold → Athena), se ejecuta sola cada lunes 6:00 (CDMX), registra cada corrida, avisa por correo y tiene dashboard de Streamlit. Responde P1 y P4; **P2 y P3 están incompletas** (falta PROFECO). Detalle de lo hecho, lo pendiente y lo que hay que verificar en el [roadmap](ROADMAP.md).
 
 ## El problema
 
@@ -47,7 +47,7 @@ El catálogo completo, con las pruebas de cada fuente, está en [`docs/fuentes.m
 
 ![Arquitectura](docs/img/indice-del-taco-avance.png)
 
-Arquitectura serverless en capas (medallón). EventBridge Scheduler arranca la ingesta una vez por semana; silver y gold se disparan solos con eventos de S3, con un prefijo distinto por capa para que ninguna Lambda se dispare a sí misma.
+Arquitectura serverless en capas (medallón). EventBridge Scheduler dispara cada lunes a las 6:00 (CDMX) una Lambda orquestadora que invoca en orden la ingesta de Banxico, silver y gold, registra cada etapa en `registro_ejecuciones` y avisa por SNS si algo falla o hay datos sospechosos ([ADR 0013](docs/adr/0013-orquestacion-eventbridge-y-lambda.md)). *El diagrama de arriba es una versión anterior (muestra una VPC y disparos por eventos de S3): está pendiente de actualizar.*
 
 | Capa | Contenido | Para qué sirve |
 | :---- | :---- | :---- |
@@ -90,22 +90,37 @@ Produce `chat_proveedor.txt`, `receta.csv` y `ventas_diarias.csv`. El parser del
 Para generar silver y cuarentena en local (Parquet particionado por año y semana ISO):
 
 ```bash
-PYTHONPATH=.:src .venv/bin/python -m transformacion.silver_chat --fecha-ingesta 2026-11-16   # lee data/sintetico, escribe data/lake
+PYTHONPATH=.:src .venv/bin/python -m transformacion.silver_chat --fecha-ingesta 2026-11-16   # solo silver del chat
+PYTHONPATH=.:src .venv/bin/python -m transformacion.pipeline_local                              # silver + gold completos en data/lake
 ```
+
+### Dashboard y snapshot
+
+El dashboard (`dashboard/app.py`) lee `snapshot_gold/`, que se genera desde gold (sin las columnas ni filas con el precio del proveedor; riesgo residual en el [ADR 0012](docs/adr/0012-privacidad-del-snapshot.md)):
+
+```bash
+PYTHONPATH=.:src .venv/bin/python -m transformacion.snapshot                       # desde data/lake/gold (pipeline local)
+PYTHONPATH=.:src .venv/bin/python -m transformacion.snapshot --bucket <bucket-gold>  # o desde S3 (necesita boto3 y credenciales)
+pip install -r dashboard/requirements.txt && streamlit run dashboard/app.py          # ver el tablero
+```
+
+Lo que aún no tiene datos (P2, y los insumos de P3 distintos de la carne) se muestra como «Aún sin datos» o «Sin dato», nunca como cero ([ADR 0019](docs/adr/0019-datos-faltantes-sin-dato.md)).
 
 ## Cómo desplegarlo
 
-[EN CONSTRUCCIÓN] *La plantilla `infra/template.yaml` todavía no existe; estos son los pasos previstos. Se confirmarán cuando esté lista (H7).*
+Las plantillas de CloudFormation están en `infra/` (`00` a `07`) y se despliegan en orden; cada stack importa valores del anterior. Los comandos exactos, el empaquetado de las Lambdas y la prueba de la falla simulada están en [`infra/README.md`](infra/README.md). Para recrearlo en otro negocio o cuenta, ver la [guía de réplica](docs/guia_replica.md).
 
-1. Tener una cuenta de AWS con un usuario IAM propio y MFA activado.
-2. En la consola de AWS, abrir **CloudFormation** y elegir **Crear stack**.
-3. Subir el archivo `infra/template.yaml` y completar los parámetros (por ejemplo, el correo que recibe las alertas).
-4. Esperar a que el stack llegue a `CREATE_COMPLETE`.
-5. Para eliminar todo y no generar costos: vaciar los buckets de S3 y borrar el stack.
+1. Tener una cuenta de AWS y credenciales (`aws login`).
+2. Desplegar `01` (bronze), `03` (silver, gold, cuarentena) y `00` (artefactos).
+3. Guardar el token de Banxico en Parameter Store (`SecureString`); nunca en el repositorio.
+4. Empaquetar el código con `python infra/empaquetar_lambda.py` y desplegar `04` (Banxico), `05` (silver y gold), `06` (Glue y Athena) y `07` (orquestación y alertas, con el correo como parámetro).
+5. Para eliminar todo y no generar costos: vaciar los buckets de S3 y borrar los stacks (los buckets tienen `DeletionPolicy: Retain`).
+
+*Pendiente: un script que haga todo esto en un solo comando y la prueba destruir → desplegar (H7).*
 
 ## Resultados
 
-[EN CONSTRUCCIÓN] *Pendiente (H4 a H8). Aquí irán el dashboard público, el Índice del Taco contra la inflación, el video demo y el costo real de operación.*
+Con los datos sintéticos, de enero a septiembre el costo de la carne por taco subió ≈ 12 % y el INPC general ≈ 1.7 % (consultas P1 y P4 interpretadas en [`sql/README.md`](sql/README.md)). *Pendiente: URL pública del dashboard, video demo y costo real de operación ([`docs/costos.md`](docs/costos.md) solo tiene estimaciones).*
 
 ### Hallazgos
 
@@ -125,15 +140,16 @@ PYTHONPATH=.:src .venv/bin/python -m transformacion.silver_chat --fecha-ingesta 
 │   ├── img/                # Diagrama de arquitectura (PNG y JSON de Diagramon)
 │   ├── fuentes.md          # Catálogo y validación de las fuentes de datos
 │   ├── diccionario_datos.md # Contrato de silver y gold (v0)
-│   ├── runbook.md          # [EN CONSTRUCCIÓN]
-│   └── costos.md           # [EN CONSTRUCCIÓN]
-├── infra/                  # [EN CONSTRUCCIÓN] Plantillas de CloudFormation
-├── src/                    # ingesta/ (parser, Banxico) y transformacion/ (silver del chat); [EN CONSTRUCCIÓN] PROFECO, gold
+│   ├── runbook.md          # Qué hacer ante cada alerta
+│   ├── costos.md           # Estimación de costos y controles (el gasto real está sin medir)
+│   └── guia_replica.md     # Cómo adaptarlo a otro negocio
+├── infra/                  # Plantillas de CloudFormation (00 a 07) y empaquetado de las Lambdas
+├── src/                    # ingesta/ (parser, Banxico), transformacion/ (silver, gold, pipeline local, snapshot) y handlers/ (Lambdas); falta PROFECO
 ├── sql/                    # Consultas de Athena por pregunta (P1 y P4; la DDL está en infra/06)
 ├── datos_sinteticos/       # Generador reproducible (semilla fija)
-├── dashboard/              # [EN CONSTRUCCIÓN]
-├── snapshot_gold/          # [EN CONSTRUCCIÓN] Copia de las tablas gold para el dashboard
-├── tests/                  # Pruebas del parser y del generador
+├── dashboard/              # Dashboard de Streamlit y su requirements.txt
+├── snapshot_gold/          # CSV públicos generados desde gold (los lee el dashboard)
+├── tests/                  # Pruebas del pipeline (126), de los handlers y del dashboard
 ├── .env.example            # Variables de entorno de ejemplo, sin valores reales
 ├── LICENSE
 └── README.md
@@ -146,22 +162,25 @@ PYTHONPATH=.:src .venv/bin/python -m transformacion.silver_chat --fecha-ingesta 
 - [Aclaraciones](docs/consultoria/aclaraciones.md): contradicciones encontradas y preguntas pendientes.
 - [Fuentes de datos](docs/fuentes.md): validación de cada fuente.
 - [Diccionario de datos](docs/diccionario_datos.md) (v0)
-- [ADR 0001: Alcance](docs/adr/0001-alcance.md)
-- [ADR 0010: cuenta y región de AWS](docs/adr/0010-cuenta-aws-y-region.md)
-- ADR [0003 estadístico](docs/adr/0003-estadistico-precio-semanal.md), [0005 salsa](docs/adr/0005-salsa.md), [0008 merma](docs/adr/0008-merma.md), [0009 semana base](docs/adr/0009-semana-base-indice.md)
-- [ADR 0007: Datos sintéticos](docs/adr/0007-datos-sinteticos-reconstruccion.md)
+- [Runbook](docs/runbook.md), [costos](docs/costos.md) y [guía de réplica](docs/guia_replica.md)
+- [Roadmap](ROADMAP.md): estado, pendientes y decisiones provisionales
+- [ADRs](docs/adr/): 19 decisiones, todas provisionales hasta que las revise el equipo:
+  - **Alcance y cuenta:** [0001 alcance](docs/adr/0001-alcance.md), [0010 cuenta y región](docs/adr/0010-cuenta-aws-y-region.md)
+  - **Arquitectura:** [0002 capas y Parquet](docs/adr/0002-capas-parquet-catalogo.md), [0004 CloudFormation](docs/adr/0004-iac-cloudformation.md), [0006 dashboard](docs/adr/0006-dashboard-streamlit.md), [0013 orquestación](docs/adr/0013-orquestacion-eventbridge-y-lambda.md), [0017 idempotencia](docs/adr/0017-idempotencia-y-reproceso.md)
+  - **Datos y calidad:** [0007 datos sintéticos](docs/adr/0007-datos-sinteticos-reconstruccion.md), [0011 PROFECO y SNIIM](docs/adr/0011-ingesta-hibrida-profeco-sniim.md), [0014 rezago por fuente](docs/adr/0014-frecuencia-y-rezago-por-fuente.md), [0015 proxies](docs/adr/0015-proxies-pastor-y-suadero.md), [0016 umbrales](docs/adr/0016-reglas-y-umbrales-de-calidad.md), [0018 inflación](docs/adr/0018-inflacion-con-banxico.md), [0019 sin dato](docs/adr/0019-datos-faltantes-sin-dato.md)
+  - **Cálculo y privacidad:** [0003 estadístico](docs/adr/0003-estadistico-precio-semanal.md), [0005 salsa](docs/adr/0005-salsa.md), [0008 merma](docs/adr/0008-merma.md), [0009 semana base](docs/adr/0009-semana-base-indice.md), [0012 privacidad del snapshot](docs/adr/0012-privacidad-del-snapshot.md)
 
 ## Avance
 
-- [ ] H0 · Arranque
-- [ ] H1 · La bodega, a mano
-- [ ] H2 · Ingesta automatizada
-- [ ] H3 · Silver y SQL
-- [ ] H4 · Gold e Índice del Taco
-- [ ] H5 · Orquestación
-- [ ] H6 · Observabilidad y calidad
-- [ ] H7 · Infraestructura como código completa
-- [ ] H8 · Producto y entrega
+- [ ] H0 · Arranque *(parcial: falta el Budget de AWS)*
+- [x] H1 · La bodega, a mano
+- [ ] H2 · Ingesta automatizada *(Banxico y chat listos; falta PROFECO)*
+- [ ] H3 · Silver y SQL *(falta PROFECO y la comparación CSV vs Parquet)*
+- [ ] H4 · Gold e Índice del Taco *(P1 y P4 listos; P2 y P3 incompletas)*
+- [ ] H5 · Orquestación *(desplegada; falta ver dos corridas automáticas)*
+- [ ] H6 · Observabilidad y calidad *(alertas probadas por una compañera; falta la evidencia)*
+- [ ] H7 · Infraestructura como código completa *(plantillas listas; falta el script y destruir → desplegar)*
+- [ ] H8 · Producto y entrega *(dashboard y snapshot listos; faltan URL pública, presentación y video)*
 
 ## Equipo
 

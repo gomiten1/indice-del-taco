@@ -268,6 +268,32 @@ Resources:
           SerdeInfo:
             SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
 
+  GoldContribucionInsumo:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref Database
+      TableInput:
+        Name: contribucion_insumo
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+          "parquet.compression": SNAPPY
+        StorageDescriptor:
+          Columns:
+            - { Name: trimestre, Type: string }
+            - { Name: tipo_taco, Type: string }
+            - { Name: insumo, Type: string }
+            - { Name: aportacion_mxn, Type: "decimal(8,2)" }
+            - { Name: aportacion_pct, Type: "decimal(8,2)" }
+            - { Name: ranking, Type: int }
+            - { Name: estado, Type: string }
+          Location: !Sub ["s3://${B}/contribucion_insumo/", { B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-gold-bucket-name" } }]
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+
   RegistroEjecuciones:
     Type: AWS::Glue::Table
     Properties:

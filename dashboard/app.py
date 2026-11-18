@@ -53,15 +53,25 @@ st.line_chart(costo_base.pivot(index="semana_inicio", columns="tipo_taco", value
 
 # P2: ¿Mi proveedor cobra caro o barato frente al mercado?
 st.subheader("2. ¿El proveedor cobra caro o barato frente al mercado CDMX? (P2 — Aproximado)")
-ultima_comp = comp[comp["semana"] == ultima_sem][["insumo", "brecha_vs_mercado_pct", "diagnostico"]]
-if ultima_comp.empty and not comp.empty:
-    ultima_comp = comp[comp["semana"] == comp["semana"].max()][["insumo", "brecha_vs_mercado_pct", "diagnostico"]]
-st.dataframe(ultima_comp, use_container_width=True, hide_index=True)
+if comp.empty:
+    st.info("Aún sin datos: la comparación contra el mercado necesita los precios de PROFECO, que todavía no se cargan al pipeline.")
+else:
+    ultima_comp = comp[comp["semana"] == ultima_sem][["insumo", "brecha_vs_mercado_pct", "diagnostico"]]
+    if ultima_comp.empty:
+        ultima_comp = comp[comp["semana"] == comp["semana"].max()][["insumo", "brecha_vs_mercado_pct", "diagnostico"]]
+    st.dataframe(ultima_comp, use_container_width=True, hide_index=True)
 
 # P3: ¿Qué insumo explica el aumento de costos?
-st.subheader("3. ¿Qué insumo explica el aumento en el periodo evaluado? (P3 — Aproximado)")
-top3 = contrib[contrib["ranking"] <= 3][["periodo_evaluado", "tipo_taco", "ranking", "insumo", "aporte_cambio_pct"]]
-st.dataframe(top3, use_container_width=True, hide_index=True)
+st.subheader("3. ¿Qué insumo explica el aumento en el último trimestre? (P3)")
+if contrib.empty:
+    st.info("Aún sin datos: se necesitan al menos dos semanas de precios dentro de un trimestre.")
+else:
+    trimestre = contrib["trimestre"].max()
+    top3 = contrib[(contrib["trimestre"] == trimestre) & (contrib["ranking"] <= 3)].copy()
+    etiquetas = {"sin dato": "Sin dato", "sin cambio": "Sin cambio"}
+    top3["Aportación al cambio"] = [etiquetas.get(e, f"{p:.1f} %") for e, p in zip(top3["estado"], top3["aportacion_pct"])]
+    st.caption(f"Trimestre {trimestre}. «Sin dato» significa que todavía no hay precios de ese insumo (faltan los datos de mercado), no que aporte 0 %.")
+    st.dataframe(top3[["tipo_taco", "ranking", "insumo", "Aportación al cambio"]], use_container_width=True, hide_index=True)
 
 # P4: ¿Mi costo sube más o menos que la inflación?
 st.subheader("4. Índice del Taco vs. Inflación Oficial INPC Banxico (Base 100) (P4)")

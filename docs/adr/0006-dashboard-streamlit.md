@@ -13,5 +13,5 @@ La dueña de *La TaquerIA Opus* necesita responder cuatro preguntas clave de cos
 3. Declarar explícitamente en el tablero los supuestos metodológicos (gramajes de receta, merma del 12 % solo en pastor y aproximaciones de mercado CDMX).
 
 ## Consecuencias
-* **Positivas:** Cumplimiento estricto de confidencialidad de precios, cero costo de hosting y respuesta visual inmediata a las preguntas P1–P4.
-* **Negativas:** Requiere actualizar `snapshot_gold/` al cierre de cada corte semanal publicado.
+* **Positivas:** No se publican las columnas con el precio del proveedor, cero costo de hosting y respuesta visual inmediata a las preguntas P1–P4.
+* **Negativas:** Requiere actualizar `snapshot_gold/` al cierre de cada corte semanal (se genera con `python -m transformacion.snapshot`). Con la receta pública, el costo por taco permite estimar el precio de compra de la carne: riesgo aceptado en el [ADR 0012](0012-privacidad-del-snapshot.md).

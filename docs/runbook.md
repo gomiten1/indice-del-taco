@@ -1,77 +1,120 @@
-# Runbook Operativo — Pipeline El Índice del Taco
+# Runbook operativo: pipeline El Índice del Taco
 
-Este manual describe los procedimientos de diagnóstico y recuperación ante fallas o alertas emitidas por el orquestador (`indice-del-taco-dev-orquestador`), CloudWatch y Amazon SNS en la región `us-east-2`.
+Qué hacer cuando llega una alerta del orquestador (`indice-del-taco-dev-orquestador`), de CloudWatch o de Amazon SNS. Todo está en la región `us-east-2`; los nombres son los de la plantilla `infra/07`.
+
+| Qué llega | Sección |
+| :---- | :---- |
+| Correo `[Indice del Taco] FALLA en ingesta` | 1 |
+| Correo `[Indice del Taco] FALLA en silver` | 2 |
+| Correo `[Indice del Taco] FALLA en gold` | 3 |
+| Correo `[Indice del Taco] Datos sospechosos o atrasados` | 4 |
+| Alarma `indice-del-taco-dev-orquestador-errores` | 5 |
+| Alarma `indice-del-taco-dev-sin-ejecucion-7-dias` | 6 |
+
+**Primer paso siempre:** ver qué quedó registrado de la corrida (Athena, base `indice_taco_dev`, workgroup `indice-del-taco-dev`):
+
+```sql
+SELECT fecha_hora_inicio, etapa, fuente, estado, registros_leidos, aceptados, rechazados, detalle
+FROM registro_ejecuciones
+ORDER BY fecha_hora_inicio DESC, etapa
+LIMIT 20;
+```
+
+Los logs de cada etapa están en CloudWatch: `/aws/lambda/indice-del-taco-dev-ingesta-banxico`, `-silver`, `-gold` y `-orquestador`.
+
+Reprocesar es seguro: todas las etapas son idempotentes (ADR 0017), no se duplican datos.
 
 ---
 
-## 1. Alerta: Falla en etapa de ingesta (`Banxico` / `PROFECO`)
+## 1. Falla en la etapa `ingesta` (Banxico)
 
-* **Síntoma:** Correo de SNS con asunto `[ALERTA] Falla en etapa ingesta` o registro en la tabla `registro_ejecuciones` con `estado = 'error'`.
-* **Causa probable:**
-  1. Indisponibilidad temporal de la API SIE de Banxico o vencimiento/error en el parámetro SSM `/indice-del-taco/dev/banxico_token`.
-  2. Bloqueo HTTP `403` en portal externo o ausencia de carga manual quincenal en `bronze`.
-* **Diagnóstico:**
-  1. Revisar logs en CloudWatch Log Group `/aws/lambda/indice-del-taco-dev-ingesta-banxico`.
-  2. Validar existencia del token en Parameter Store:
-     ```bash
-     aws ssm get-parameter --name /indice-del-taco/dev/banxico_token --region us-east-2
-     ```
+* **Síntoma:** correo `FALLA en ingesta`, o `estado = 'error'` en `registro_ejecuciones` con etapa `ingesta`.
+* **Causas probables:**
+  1. Banxico no responde o respondió HTTP 400 (por ejemplo, se excedió el límite de consultas).
+  2. El token está mal o no existe en Parameter Store (`/indice-del-taco/dev/banxico_token`).
+  3. La respuesta no trae la serie esperada (el mensaje dice "Respuesta inesperada de Banxico").
+* **Diagnóstico:** leer el `detalle` del registro y el log `/aws/lambda/indice-del-taco-dev-ingesta-banxico`. Comprobar que el parámetro existe:
+  ```bash
+  aws ssm get-parameter --name /indice-del-taco/dev/banxico_token --region us-east-2 --query Parameter.LastModifiedDate
+  ```
+* **Recuperación:** si fue una caída temporal, relanzar el orquestador:
+  ```bash
+  aws lambda invoke --function-name indice-del-taco-dev-orquestador \
+    --payload '{"fecha_ingesta":"AAAA-MM-DD"}' --cli-binary-format raw-in-base64-out out.json
+  ```
+  Si el token expiró o es incorrecto, actualizar el `SecureString` con `aws ssm put-parameter --overwrite` y relanzar.
+* **Nota:** PROFECO **no** forma parte de la corrida automática (la descarga está bloqueada; se carga a mano, ADR 0011).
+
+## 2. Falla en la etapa `silver`
+
+* **Síntoma:** correo `FALLA en silver`.
+* **Causas probables:**
+  1. **Falta un archivo en bronze:** el detalle dice `No hay archivos en raw/chat/ con fecha_ingesta <= ...` (o `raw/banxico/SP1/`, `raw/interno/`). Nunca se ha subido el chat o la receta.
+  2. **Esquema inesperado** (`EsquemaInesperado`): el JSON de Banxico o el CSV de la receta no tienen la forma esperada.
+* **Diagnóstico:** `detalle` en `registro_ejecuciones` y el log de `-silver`. Revisar qué hay en bronze:
+  ```bash
+  aws s3 ls s3://indice-del-taco-dev-bronze-<ID-DE-CUENTA>/raw/ --recursive | tail
+  ```
+* **Recuperación:** subir el archivo que falta (`raw/chat/fecha_ingesta=AAAA-MM-DD/chat_proveedor.txt` o `raw/interno/fecha_ingesta=AAAA-MM-DD/receta.csv`) y relanzar el orquestador. Si el esquema cambió, corregir el archivo o ajustar el código y desplegar de nuevo.
+
+## 3. Falla en la etapa `gold`
+
+* **Síntoma:** correo `FALLA en gold`. Los datos de gold **no se actualizaron** y el dashboard sigue mostrando la corrida anterior.
+* **Causa probable:** `No hay datos en silver_precio_proveedor/silver_receta` (silver no corrió) o un error al calcular.
+* **Recuperación:** ver el log de `-gold`. Si silver sí corrió bien, relanzar solo gold:
+  ```bash
+  aws lambda invoke --function-name indice-del-taco-dev-gold --payload '{}' --cli-binary-format raw-in-base64-out out.json
+  ```
+
+## 4. Datos sospechosos o atrasados (la corrida terminó)
+
+* **Síntoma:** correo `Datos sospechosos o atrasados`; la corrida **sí terminó** y gold se actualizó.
+* **Causas probables:**
+  1. **Cuarentena alta:** más de 10 % de los registros de una fuente se rechazaron (por ejemplo, el proveedor cambió su forma de escribir, un `$0` o una unidad como "caja").
+  2. **Fuente atrasada:** el chat o Banxico llevan más de 10 días sin datos nuevos (ADR 0014).
+* **Diagnóstico:** ver qué se rechazó y por qué:
+  ```sql
+  SELECT fuente, regla, motivo, registro_original, linea FROM cuarentena ORDER BY fecha_ingesta DESC, linea;
+  ```
 * **Recuperación:**
-  1. Si fue caída temporal de la API, reejecutar manualmente el orquestador (el pipeline es idempotente y no duplica registros):
+  1. Si hubo registros mal capturados, subir una versión corregida del archivo a bronze **con la misma `fecha_ingesta`** y relanzar `silver` y `gold` (silver reemplaza las particiones y limpia la cuarentena anterior):
      ```bash
-     aws lambda invoke --function-name indice-del-taco-dev-orquestador \
-       --payload '{"fecha_ingesta":"AAAA-MM-DD"}' \
-       --cli-binary-format raw-in-base64-out out.json
+     aws lambda invoke --function-name indice-del-taco-dev-silver --payload '{"fecha_ingesta":"AAAA-MM-DD"}' --cli-binary-format raw-in-base64-out out.json
+     aws lambda invoke --function-name indice-del-taco-dev-gold --payload '{}' --cli-binary-format raw-in-base64-out out.json
      ```
-  2. Si el token expiró, actualizar el parámetro `SecureString` en SSM y relanzar.
+  2. Si el chat está atrasado, pedir la exportación reciente del proveedor y subirla a `raw/chat/fecha_ingesta=AAAA-MM-DD/chat_proveedor.txt`. Mientras tanto gold sigue usando el último precio vigente.
 
----
+## 5. Alarma `indice-del-taco-dev-orquestador-errores`
 
-## 2. Alerta: Cuarentena alta o datos sospechosos en `Silver`
+* **Síntoma:** alarma en `ALARM` (puede llegar como segundo correo tras una falla). Significa que la función orquestadora **terminó con error**.
+* **Causas probables:** una etapa falló (ver 1 a 3), o el orquestador mismo falló (tiempo agotado de 300 s, memoria, error no controlado).
+* **Diagnóstico:** log de `/aws/lambda/indice-del-taco-dev-orquestador`. Si el mensaje es de una etapa, seguir la sección correspondiente.
+* **Recuperación:** corregir la causa y relanzar el orquestador. La alarma vuelve a `OK` sola.
 
-* **Síntoma:** Alerta de SNS indicando `UMBRAL_CUARENTENA` (> 10 % de registros rechazados) o variación semanal superior al 25 % (`UMBRAL_VARIACION`).
-* **Causa probable:** Cambio en el formato de mensajes del proveedor en WhatsApp, errores de dedo en precios (ej. `$0` o unidad inválida) o archivo corrupto en `bronze`.
-* **Diagnóstico:**
-  1. Consultar los registros rechazados y su motivo en el bucket `cuarentena` (`s3://indice-del-taco-dev-cuarentena-<ID>/fuente=.../`).
-  2. Verificar qué línea del archivo crudo en `bronze` detonó el rechazo.
+## 6. Alarma `indice-del-taco-dev-sin-ejecucion-7-dias`
+
+* **Síntoma:** alarma en `ALARM`: el orquestador **no se ejecutó en 7 días**.
+* **Causa probable:** el schedule semanal (`indice-del-taco-dev-semanal`, lunes 6:00 hora de CDMX) está deshabilitado o falla al invocar.
 * **Recuperación:**
-  1. Corregir o cargar la versión limpia del archivo fuente en `bronze` bajo la misma llave `fecha_ingesta=AAAA-MM-DD/`.
-  2. Reejecutar la etapa `silver` y `gold`; Silver sobrescribirá las particiones afectadas y limpiará la cuarentena obsoleta sin duplicar datos:
-     ```bash
-     aws lambda invoke --function-name indice-del-taco-dev-silver \
-       --payload '{"fecha_ingesta":"AAAA-MM-DD"}' \
-       --cli-binary-format raw-in-base64-out out.json
-     aws lambda invoke --function-name indice-del-taco-dev-gold \
-       --payload '{}' \
-       --cli-binary-format raw-in-base64-out out.json
-     ```
+  1. En la consola, **EventBridge → Scheduler → Schedules**, comprobar que esté en `Enabled`.
+  2. Ejecutar a mano el orquestador para poner al día el corte semanal.
 
 ---
 
-## 3. Alerta: Fuente atrasada (`UMBRAL_REZAGO_DIAS > 10`)
+## 7. Prueba de la falla simulada (verificación de N5)
 
-* **Síntoma:** Notificación de que el chat del proveedor o Banxico supera 10 días sin datos nuevos.
-* **Causa probable:** El proveedor no envió lista de precios en la semana en curso o no se subió el respaldo del chat a `bronze`.
-* **Diagnóstico y Acción:**
-  1. Confirmar si existe exportación reciente del chat de WhatsApp pendiente de subir a `s3://<bronze>/raw/chat/fecha_ingesta=AAAA-MM-DD/chat_proveedor.txt`.
-  2. Mientras no llegue lista nueva, Gold mantiene vigente el último precio válido conocido conforme al contrato de negocio.
+Para comprobar que las alertas llegan, antes de una entrega o de un cambio mayor:
 
----
-
-## 4. Alarma CloudWatch: Orquestador sin ejecuciones en 7 días
-
-* **Síntoma:** Alarma `OrquestadorSinEjecuciones7Dias` en estado `ALARM`.
-* **Causa probable:** Deshabilitación accidental de la regla de EventBridge Scheduler (programada cada lunes 6:00 AM CDMX).
-* **Recuperación:**
-  1. Verificar en la consola de **Amazon EventBridge → Schedules** que la programación esté en estado `Enabled`.
-  2. Ejecutar manualmente el orquestador para poner al día el corte semanal.
-
----
-
-## 5. Prueba de simulación de falla (Verificación N5)
-
-Para validar que las alertas por correo funcionan antes de cada entrega o cambio mayor:
 ```bash
 aws lambda invoke --function-name indice-del-taco-dev-orquestador \
-  --payload '{"simular_falla":"silver"}' \
-  --cli-binary-format raw-in-base64-out out.json
+  --payload '{"simular_falla":"silver"}' --cli-binary-format raw-in-base64-out out.json
+```
+
+Qué debe pasar:
+
+1. La invocación termina con error (`FunctionError`): es lo esperado.
+2. Llega el correo `[Indice del Taco] FALLA en silver` con la nota "SIMULACION a proposito"; puede llegar un segundo correo de la alarma `orquestador-errores`.
+3. En `registro_ejecuciones` queda una fila con etapa `silver` y `estado = 'error'`.
+4. Gold **no** se actualiza (la corrida se detiene en la etapa que falla).
+
+Se acepta una falla simulada en `ingesta`, `silver` o `gold`. Después de la prueba, relanzar el orquestador sin parámetros para dejar los datos al día.

@@ -141,8 +141,51 @@ def test_mes_sin_inpc_deja_la_comparacion_vacia_pero_conserva_el_indice():
 
 def test_sin_datos_devuelve_tablas_vacias():
     g = gold.calcular_gold(precios(), RECETA, None)
-    assert all(t.num_rows == 0 for t in g.values()) and set(g) == {"costo_taco_semanal", "precio_insumo_semanal", "comparativo_inflacion"}
+    assert all(t.num_rows == 0 for t in g.values())
+    assert set(g) == {"costo_taco_semanal", "precio_insumo_semanal", "comparativo_inflacion", "contribucion_insumo"}
 
 
 def test_calculo_determinista():
     assert calcular() == calcular()
+
+
+# --- P3: contribución de cada insumo al cambio de costo ------------------------
+
+def contribucion(g, tipo, trimestre="2026Q1"):
+    return [f for f in filas(g["contribucion_insumo"]) if f["tipo_taco"] == tipo and f["trimestre"] == trimestre]
+
+
+def test_esquema_de_contribucion_insumo():
+    t = calcular()["contribucion_insumo"]
+    assert [(f.name, str(f.type)) for f in t.schema] == [
+        ("trimestre", "string"), ("tipo_taco", "string"), ("insumo", "string"), ("aportacion_mxn", "decimal128(8, 2)"),
+        ("aportacion_pct", "decimal128(8, 2)"), ("ranking", "int32"), ("estado", "string")]
+
+
+def test_la_carne_explica_el_aumento_y_los_demas_insumos_salen_sin_dato():
+    """Pastor: de $150 a $160 en el trimestre = +$0.50 por taco (50 g). El resto de la lista del taco no tiene dato."""
+    pastor = contribucion(calcular(), "pastor")
+    assert [(f["insumo"], f["aportacion_mxn"], f["aportacion_pct"], f["ranking"], f["estado"]) for f in pastor] == [
+        ("pastor", D("0.50"), D("100.00"), 1, "ok"),
+        ("tortilla", None, None, 2, "sin dato"), ("cebolla", None, None, 3, "sin dato"), ("cilantro", None, None, 4, "sin dato"),
+        ("limon", None, None, 5, "sin dato"), ("pina", None, None, 6, "sin dato")]
+
+
+def test_sin_cambio_de_precio_no_inventa_porcentajes():
+    suadero = contribucion(calcular(), "suadero")
+    assert (suadero[0]["insumo"], suadero[0]["aportacion_mxn"], suadero[0]["aportacion_pct"], suadero[0]["estado"]) == ("suadero", D("0.00"), None, "sin cambio")
+
+
+def test_los_porcentajes_de_los_insumos_con_dato_suman_100():
+    p = precios((datetime(2026, 1, 1, 7, 0), "pastor", "150"), (datetime(2026, 2, 12, 7, 0), "pastor", "160"),
+                (datetime(2026, 1, 1, 7, 0), "tortilla", "20"), (datetime(2026, 2, 12, 7, 0), "tortilla", "22"))
+    g = calcular(precios=p, receta=receta(("pastor", "pastor", 50), ("pastor", "tortilla", 30)))
+    pastor = contribucion(g, "pastor")
+    assert [(f["insumo"], f["aportacion_mxn"], f["aportacion_pct"], f["ranking"]) for f in pastor[:2]] == [
+        ("pastor", D("0.50"), D("89.29"), 1), ("tortilla", D("0.06"), D("10.71"), 2)]  # 0.50/0.56 y 0.06/0.56
+    assert [f["estado"] for f in pastor[2:]] == ["sin dato"] * 4 and [f["ranking"] for f in pastor[2:]] == [3, 4, 5, 6]
+
+
+def test_un_trimestre_con_una_sola_semana_no_se_reporta():
+    p = precios((datetime(2026, 1, 1, 7, 0), "pastor", "150"))
+    assert filas(calcular(precios=p)["contribucion_insumo"]) == []
