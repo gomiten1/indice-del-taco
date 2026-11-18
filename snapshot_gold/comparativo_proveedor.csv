@@ -1,1 +1,10 @@
-anio,semana,insumo,brecha_vs_mercado_pct,diagnostico
+anio,semana_iso,insumo,precio_menudeo_kg,precio_mayoreo_kg,brecha_menudeo_pct,brecha_mayoreo_pct,aproximado,diagnostico
+2026,29,longaniza,114.00,,0.88,,False,en rango
+2026,30,longaniza,114.00,84.00,2.63,39.29,False,en rango
+2026,31,longaniza,114.00,84.00,2.63,39.29,False,en rango
+2026,29,pastor,108.00,,41.67,,True,caro
+2026,30,pastor,108.00,110.00,41.67,39.09,True,caro
+2026,31,pastor,108.00,110.00,41.67,39.09,True,caro
+2026,29,suadero,224.10,,-22.36,,True,barato
+2026,30,suadero,231.00,,-24.68,,True,barato
+2026,31,suadero,231.00,195.00,-24.68,-10.77,True,barato

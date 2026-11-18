@@ -20,6 +20,7 @@ costo = pd.read_csv("snapshot_gold/costo_taco_semanal.csv")
 comp = pd.read_csv("snapshot_gold/comparativo_proveedor.csv")
 infl = pd.read_csv("snapshot_gold/comparativo_inflacion.csv")
 contrib = pd.read_csv("snapshot_gold/contribucion_insumo.csv")
+precios_mercado = pd.read_csv("snapshot_gold/precio_insumo_semanal.csv")
 
 ultima_sem = costo["semana_iso"].max()
 ultimo_costo = costo[costo["semana_iso"] == ultima_sem]
@@ -56,10 +57,14 @@ st.subheader("2. ¿El proveedor cobra caro o barato frente al mercado CDMX? (P2 
 if comp.empty:
     st.info("Aún sin datos: la comparación contra el mercado necesita los precios de PROFECO, que todavía no se cargan al pipeline.")
 else:
-    ultima_comp = comp[comp["semana"] == ultima_sem][["insumo", "brecha_vs_mercado_pct", "diagnostico"]]
-    if ultima_comp.empty:
-        ultima_comp = comp[comp["semana"] == comp["semana"].max()][["insumo", "brecha_vs_mercado_pct", "diagnostico"]]
-    st.dataframe(ultima_comp, use_container_width=True, hide_index=True)
+    mercado = precios_mercado[precios_mercado["fuente"].isin(["menudeo", "mayoreo"])]
+    desde, hasta = mercado.sort_values(["anio", "semana_iso"]).iloc[[0, -1]][["anio", "semana_iso"]].itertuples(index=False)
+    st.caption(f"Datos de mercado (PROFECO) solo de las semanas {desde.anio}-S{desde.semana_iso:02d} a {hasta.anio}-S{hasta.semana_iso:02d}: "
+               "el archivo se carga a mano y no cubre más tiempo (ADR 0020). «Caro» o «barato» = más de 10 % arriba o abajo del menudeo; "
+               "pastor y suadero se comparan con un corte parecido (ADR 0015), por eso es aproximado.")
+    ultima = comp.sort_values(["anio", "semana_iso"]).iloc[-1]
+    st.dataframe(comp[(comp["anio"] == ultima["anio"]) & (comp["semana_iso"] == ultima["semana_iso"])][
+        ["insumo", "brecha_menudeo_pct", "brecha_mayoreo_pct", "diagnostico", "aproximado"]], use_container_width=True, hide_index=True)
 
 # P3: ¿Qué insumo explica el aumento de costos?
 st.subheader("3. ¿Qué insumo explica el aumento en el último trimestre? (P3)")

@@ -23,6 +23,6 @@ Es lo más parecido disponible en una fuente oficial; SNIIM, la alternativa, no 
 
 ## Consecuencias
 
-- **No está implementado en el pipeline todavía:** P2 está vacío y P3 trae solo la carne. Los snapshots anteriores usaban $108 y $231 como constantes para todas las semanas; eso ya no existe.
+- **Implementado el 18/11** ([ADR 0020](0020-profeco-csv-y-cobertura.md), [0021](0021-reglas-silver-profeco.md), [0022](0022-p2-mercado-unidades-y-diagnostico.md)): P2 tiene datos en las semanas 29 a 31 de 2026. Medianas reales: pastor $108/kg, suadero $231/kg.
 - La muestra de mayoreo es pequeña (tortilla 2 filas, cilantro 1); la comparación puede ser poco robusta.
 - La dueña debe aprobar las equivalencias.

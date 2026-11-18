@@ -59,6 +59,21 @@ Origen: PROFECO QQP (filtrado a CDMX). Llave: (`producto_original`, `presentacio
 | `archivo_origen` | string | `bMM_AAAA_qN.csv` |
 | `fecha_ingesta` | date | |
 
+### `silver_precio_mercado`
+Origen: CSV de PROFECO cargado a mano (solo CDMX y los insumos del taco). Partición: `anio`, `semana_iso`. Reglas: [ADR 0021](adr/0021-reglas-silver-profeco.md).
+
+| Columna | Tipo | Descripción |
+| :---- | :---- | :---- |
+| `fecha_registro` | date | Día del aviso |
+| `producto_original`, `presentacion`, `marca` | string | Tal como vienen |
+| `insumo`, `equivalencia` | string | Insumo del taco y `exacta` o `proxy` ([ADR 0015](adr/0015-proxies-pastor-y-suadero.md)) |
+| `precio` | decimal(10,2) | Precio de la presentación |
+| `precio_kg`, `unidad` | decimal / string | Precio por kilo y `kg` o `manojo`; sin `precio_kg` si no viene en kilos |
+| `canal` | string | `mayoreo` (Central de Abasto) o `menudeo` |
+| `cadena_comercial`, `nombre_comercial`, `direccion`, `municipio` | string | Dónde se tomó el precio |
+
+La **cobertura** (`fecha_min`, `fecha_max` de lo usado) queda en el `detalle` de `registro_ejecuciones` (fuente `profeco`).
+
 ### `silver_inpc`
 Origen: Banxico, varias series en la misma tabla: `SP1` (INPC general, obligatoria), `SP66540` (Alimentos, Bebidas y Tabaco) y `SP56386` (Pecuarios). Llave: (`serie_id`, `fecha`). Partición: `anio`. Los meses que Banxico marca `N/E` (la serie no existe todavía) se **omiten**: no son error ni van a cuarentena.
 
@@ -135,7 +150,8 @@ Llave: (`anio`, `semana_iso`, `insumo`, `fuente`). Las filas con `fuente = 'prov
 | `anio`, `semana_iso` | int | |
 | `insumo` | string | |
 | `fuente` | string | `proveedor`, `menudeo`, `mayoreo` |
-| `precio_kg` | decimal(10,2) | |
+| `precio` | decimal(10,2) | Precio por `unidad` |
+| `unidad` | string | `kg`, o `manojo` (cilantro; no se convierte a kilo, [ADR 0022](adr/0022-p2-mercado-unidades-y-diagnostico.md)) |
 | `n_observaciones` | int | Cuántos precios se usaron |
 | `estadistico` | string | `mediana` para el mercado ([ADR 0003](adr/0003-estadistico-precio-semanal.md)); `ultimo_vigente` para el proveedor |
 
@@ -149,6 +165,9 @@ Llave: (`anio`, `semana_iso`, `insumo`).
 | `precio_menudeo_kg`, `precio_mayoreo_kg` | decimal(10,2) | Referencia de mercado | Sí |
 | `brecha_menudeo_pct`, `brecha_mayoreo_pct` | decimal(8,2) | (proveedor / mercado − 1) × 100 | Sí |
 | `aproximado` | boolean | Verdadero si el insumo usa un proxy | Sí |
+| `diagnostico` | string | `caro` (> +10 % contra el menudeo), `barato` (< −10 %), `en rango` o `sin dato` ([ADR 0022](adr/0022-p2-mercado-unidades-y-diagnostico.md)) | Sí |
+
+Solo hay filas en las semanas con precios de mercado (hoy 2026 S29 a S31, [ADR 0020](adr/0020-profeco-csv-y-cobertura.md)) y solo kilo contra kilo.
 
 ### `comparativo_inflacion` (P4)
 Llave: (`anio`, `mes`, `tipo_taco`). Mensual por la frecuencia del INPC. **Pública.**

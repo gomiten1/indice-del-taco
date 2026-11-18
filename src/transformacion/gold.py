@@ -4,13 +4,14 @@ Contrato: docs/diccionario_datos.md. La inflación de alimentos (N4) sale de las
 semana), 0005 (la salsa no entra; el costo cuenta solo los insumos con dato), 0008 (merma solo en pastor, como
 versión aparte) y 0009 (semana base = primera semana con todos los insumos de la receta).
 
-Lógica pura sobre tablas de pyarrow: no sabe de disco ni de S3. Queda pendiente `comparativo_proveedor` (P2),
-que necesita los precios de PROFECO. `contribucion_insumo` (P3) ya se calcula, pero los insumos sin precio salen
-como "sin dato" (nunca se inventa un aporte de 0 %).
+Lógica pura sobre tablas de pyarrow: no sabe de disco ni de S3. `comparativo_proveedor` (P2) usa los precios de
+PROFECO (ADR 0020 y 0022): solo hay mercado en las semanas que cubre el CSV. `contribucion_insumo` (P3) ya se calcula,
+pero los insumos sin precio salen como "sin dato" (nunca se inventa un aporte de 0 %).
 """
 from __future__ import annotations
 
 from datetime import date, timedelta
+import statistics
 from decimal import ROUND_HALF_UP, Decimal
 
 import pyarrow as pa
@@ -33,7 +34,13 @@ ESQUEMA_COSTO = pa.schema([
     ("incluye_merma", pa.bool_()), ("insumos_con_dato", pa.int32())])
 ESQUEMA_PRECIO_INSUMO = pa.schema([
     ("anio", pa.int32()), ("semana_iso", pa.int32()), ("insumo", pa.string()), ("fuente", pa.string()),
-    ("precio_kg", pa.decimal128(10, 2)), ("n_observaciones", pa.int32()), ("estadistico", pa.string())])
+    ("precio", pa.decimal128(10, 2)), ("unidad", pa.string()), ("n_observaciones", pa.int32()), ("estadistico", pa.string())])
+ESQUEMA_COMPARATIVO = pa.schema([
+    ("anio", pa.int32()), ("semana_iso", pa.int32()), ("insumo", pa.string()), ("precio_proveedor_kg", pa.decimal128(10, 2)),
+    ("precio_menudeo_kg", pa.decimal128(10, 2)), ("precio_mayoreo_kg", pa.decimal128(10, 2)),
+    ("brecha_menudeo_pct", pa.decimal128(8, 2)), ("brecha_mayoreo_pct", pa.decimal128(8, 2)),
+    ("aproximado", pa.bool_()), ("diagnostico", pa.string())])
+UMBRAL_DIAGNOSTICO_PCT = Decimal(10)  # ADR 0022: más de ±10 % contra el menudeo es «caro» o «barato»
 ESQUEMA_INFLACION = pa.schema([
     ("anio", pa.int32()), ("mes", pa.int32()), ("tipo_taco", pa.string()),
     ("indice_taco_base100", pa.decimal128(8, 2)), ("inpc_general_base100", pa.decimal128(8, 2)),
@@ -43,7 +50,8 @@ ESQUEMA_CONTRIBUCION = pa.schema([
     ("trimestre", pa.string()), ("tipo_taco", pa.string()), ("insumo", pa.string()),
     ("aportacion_mxn", pa.decimal128(8, 2)), ("aportacion_pct", pa.decimal128(8, 2)), ("ranking", pa.int32()), ("estado", pa.string())])
 TABLAS = {"costo_taco_semanal": ESQUEMA_COSTO, "precio_insumo_semanal": ESQUEMA_PRECIO_INSUMO,
-          "comparativo_inflacion": ESQUEMA_INFLACION, "contribucion_insumo": ESQUEMA_CONTRIBUCION}
+          "comparativo_inflacion": ESQUEMA_INFLACION, "contribucion_insumo": ESQUEMA_CONTRIBUCION,
+          "comparativo_proveedor": ESQUEMA_COMPARATIVO}
 
 
 def _q(x: Decimal) -> Decimal:
@@ -87,15 +95,49 @@ def _precios_semanales(precios: pa.Table):
     return semanas, por_semana
 
 
+def _mercado_semanal(mercado: pa.Table | None) -> dict[tuple[str, int, int, str], tuple[Decimal, str, int, bool]]:
+    """{(insumo, año ISO, semana ISO, canal): (mediana, unidad, n, es_proxy)}. Por kilo cuando se puede; si no, por manojo (ADR 0022)."""
+    grupos: dict[tuple, list] = {}
+    for f in (mercado.to_pylist() if mercado is not None else []):
+        kilo = f["unidad"] == "kg" and f["precio_kg"] is not None
+        grupos.setdefault((f["insumo"], f["anio"], f["semana_iso"], f["canal"], "kg" if kilo else f["unidad"]), []).append(
+            (f["precio_kg"] if kilo else f["precio"], f["equivalencia"] == "proxy"))
+    return {(i, a, s, c): (_q(statistics.median(v for v, _ in vs)), u, len(vs), any(p for _, p in vs))
+            for (i, a, s, c, u), vs in grupos.items()}
+
+
+def _comparativo_proveedor(por_semana, mercado_sem) -> list[dict]:
+    filas = []
+    for (producto, lunes), (precio, _) in sorted(por_semana.items()):
+        iso = lunes.isocalendar()
+        celda = {c: mercado_sem.get((producto, iso.year, iso.week, c)) for c in ("menudeo", "mayoreo")}
+        celda = {c: v for c, v in celda.items() if v is not None and v[1] == "kg"}  # solo kilo contra kilo
+        if not celda:
+            continue
+        brecha = {c: _q((precio / v[0] - 1) * 100) for c, v in celda.items()}
+        menudeo = brecha.get("menudeo")
+        diag = "sin dato" if menudeo is None else "caro" if menudeo > UMBRAL_DIAGNOSTICO_PCT else "barato" if menudeo < -UMBRAL_DIAGNOSTICO_PCT else "en rango"
+        filas.append({"anio": iso.year, "semana_iso": iso.week, "insumo": producto, "precio_proveedor_kg": _q(precio),
+                      "precio_menudeo_kg": celda["menudeo"][0] if "menudeo" in celda else None,
+                      "precio_mayoreo_kg": celda["mayoreo"][0] if "mayoreo" in celda else None,
+                      "brecha_menudeo_pct": menudeo, "brecha_mayoreo_pct": brecha.get("mayoreo"),
+                      "aproximado": any(v[3] for v in celda.values()), "diagnostico": diag})
+    return filas
+
+
 def calcular_gold(precios: pa.Table, receta: pa.Table, inpc: pa.Table | None, semana_base: date | None = None,
-                  merma_pastor: Decimal = MERMA_PASTOR) -> dict[str, pa.Table]:
+                  merma_pastor: Decimal = MERMA_PASTOR, mercado: pa.Table | None = None) -> dict[str, pa.Table]:
     semanas, por_semana = _precios_semanales(precios)
 
     filas_insumo = []
     for (producto, lunes), (precio, n) in sorted(por_semana.items()):
         iso = lunes.isocalendar()
         filas_insumo.append({"anio": iso.year, "semana_iso": iso.week, "insumo": producto, "fuente": "proveedor",
-                             "precio_kg": _q(precio), "n_observaciones": n, "estadistico": "ultimo_vigente"})
+                             "precio": _q(precio), "unidad": "kg", "n_observaciones": n, "estadistico": "ultimo_vigente"})
+    mercado_sem = _mercado_semanal(mercado)
+    for (insumo, anio, semana, canal), (precio, unidad, n, _) in sorted(mercado_sem.items()):
+        filas_insumo.append({"anio": anio, "semana_iso": semana, "insumo": insumo, "fuente": canal, "precio": precio, "unidad": unidad,
+                             "n_observaciones": n, "estadistico": "mediana"})
 
     recetas: dict[str, list[tuple[str, int]]] = {}
     for r in receta.to_pylist():
@@ -172,7 +214,8 @@ def calcular_gold(precios: pa.Table, receta: pa.Table, inpc: pa.Table | None, se
     return {"costo_taco_semanal": pa.Table.from_pylist(filas_costo, schema=ESQUEMA_COSTO),
             "precio_insumo_semanal": pa.Table.from_pylist(filas_insumo, schema=ESQUEMA_PRECIO_INSUMO),
             "comparativo_inflacion": pa.Table.from_pylist(filas_inflacion, schema=ESQUEMA_INFLACION),
-            "contribucion_insumo": pa.Table.from_pylist(filas_contribucion, schema=ESQUEMA_CONTRIBUCION)}
+            "contribucion_insumo": pa.Table.from_pylist(filas_contribucion, schema=ESQUEMA_CONTRIBUCION),
+            "comparativo_proveedor": pa.Table.from_pylist(_comparativo_proveedor(por_semana, mercado_sem), schema=ESQUEMA_COMPARATIVO)}
 
 
 def _contribucion_por_insumo(semanas, por_semana, recetas) -> list[dict]:

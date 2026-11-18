@@ -44,7 +44,8 @@ def _filas_de(etapa: str, cuerpo: dict, alertas: list[str]) -> list[dict]:
     if etapa == "silver":
         return [{"fuente": n, "leidos": r["leidos"], "aceptados": r["aceptados"], "rechazados": r["rechazados"],
                  "estado": "sospechoso" if any(a.startswith(f"{n}:") for a in alertas) or r["sospechosos"] else "ok",
-                 "detalle": json.dumps({"fecha_origen": cuerpo.get("fechas_origen", {}).get(n), "sospechosos": r["sospechosos"]})}
+                 "detalle": json.dumps({"fecha_origen": cuerpo.get("fechas_origen", {}).get(n), "sospechosos": r["sospechosos"],
+                                       **({"cobertura": cuerpo.get("cobertura_profeco")} if n == "profeco" else {})})}
                 for n, r in cuerpo["fuentes"].items()]
     return [{"fuente": "gold", "leidos": 0, "aceptados": sum(cuerpo["tablas"].values()), "rechazados": 0, "estado": "ok",
              "detalle": json.dumps(cuerpo["tablas"])}]

@@ -108,6 +108,51 @@ Resources:
           SerdeInfo:
             SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
 
+  SilverPrecioMercado:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref Database
+      TableInput:
+        Name: silver_precio_mercado
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+          "parquet.compression": SNAPPY
+          "projection.enabled": "true"
+          "projection.anio.type": "integer"
+          "projection.anio.range": "2024,2035"
+          "projection.semana_iso.type": "integer"
+          "projection.semana_iso.range": "1,53"
+          "projection.semana_iso.digits": "2"
+          "storage.location.template": !Sub ["s3://${B}/silver_precio_mercado/anio=${!anio}/semana_iso=${!semana_iso}/", { B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-name" } }]
+        PartitionKeys:
+          - { Name: anio, Type: int }
+          - { Name: semana_iso, Type: int }
+        StorageDescriptor:
+          Columns:
+            - { Name: fecha_registro, Type: date }
+            - { Name: producto_original, Type: string }
+            - { Name: insumo, Type: string }
+            - { Name: equivalencia, Type: string }
+            - { Name: presentacion, Type: string }
+            - { Name: marca, Type: string }
+            - { Name: precio, Type: "decimal(10,2)" }
+            - { Name: precio_kg, Type: "decimal(10,2)" }
+            - { Name: unidad, Type: string }
+            - { Name: canal, Type: string }
+            - { Name: cadena_comercial, Type: string }
+            - { Name: nombre_comercial, Type: string }
+            - { Name: direccion, Type: string }
+            - { Name: municipio, Type: string }
+            - { Name: archivo_origen, Type: string }
+            - { Name: fecha_ingesta, Type: date }
+          Location: !Sub ["s3://${B}/silver_precio_mercado/", { B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-silver-bucket-name" } }]
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+
   SilverInpc:
     Type: AWS::Glue::Table
     Properties:
@@ -232,10 +277,40 @@ Resources:
             - { Name: semana_iso, Type: int }
             - { Name: insumo, Type: string }
             - { Name: fuente, Type: string }
-            - { Name: precio_kg, Type: "decimal(10,2)" }
+            - { Name: precio, Type: "decimal(10,2)" }
+            - { Name: unidad, Type: string }
             - { Name: n_observaciones, Type: int }
             - { Name: estadistico, Type: string }
           Location: !Sub ["s3://${B}/precio_insumo_semanal/", { B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-gold-bucket-name" } }]
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+
+  GoldComparativoProveedor:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref Database
+      TableInput:
+        Name: comparativo_proveedor
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+          "parquet.compression": SNAPPY
+        StorageDescriptor:
+          Columns:
+            - { Name: anio, Type: int }
+            - { Name: semana_iso, Type: int }
+            - { Name: insumo, Type: string }
+            - { Name: precio_proveedor_kg, Type: "decimal(10,2)" }
+            - { Name: precio_menudeo_kg, Type: "decimal(10,2)" }
+            - { Name: precio_mayoreo_kg, Type: "decimal(10,2)" }
+            - { Name: brecha_menudeo_pct, Type: "decimal(8,2)" }
+            - { Name: brecha_mayoreo_pct, Type: "decimal(8,2)" }
+            - { Name: aproximado, Type: boolean }
+            - { Name: diagnostico, Type: string }
+          Location: !Sub ["s3://${B}/comparativo_proveedor/", { B: !ImportValue { "Fn::Sub": "${ProjectName}-${Environment}-gold-bucket-name" } }]
           InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
           OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
           SerdeInfo:

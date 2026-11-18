@@ -135,3 +135,21 @@ Hoy se traen tres series: `SP1` (INPC general, **obligatoria**), `SP66540` (Alim
 
 **Dos cosas que no son error:** los meses que Banxico marca `N/E` («no existe») se omiten sin ir a cuarentena (en estas series son los de 1969 a 1981), y una serie opcional sin archivos
 simplemente no aparece (su columna en gold queda vacía). Solo `SP1` es obligatoria: sin ella la etapa `silver` falla.
+
+---
+
+## 9. Cargar un CSV nuevo de PROFECO
+
+PROFECO no se descarga sola ([ADR 0011](adr/0011-ingesta-hibrida-profeco-sniim.md)): hay que subir el CSV a mano ([ADR 0020](adr/0020-profeco-csv-y-cobertura.md)).
+
+1. Bajar el CSV quincenal del portal de datos abiertos (por ejemplo `b07_2026_q3.csv`).
+2. Subirlo a bronze con la fecha de hoy (el archivo pesa unos 220 MB; usa `aws s3 cp`):
+   ```bash
+   aws s3 cp b07_2026_q3.csv "s3://indice-del-taco-dev-bronze-<ID-DE-CUENTA>/raw/profeco/fecha_ingesta=AAAA-MM-DD/b07_2026_q3.csv"
+   ```
+3. Relanzar el orquestador. Silver combina **todos** los CSV de `raw/profeco/` y deduplica lo que se traslape.
+4. Ver hasta qué día llegan los datos (la cobertura que se debe comunicar):
+   ```sql
+   SELECT fecha_hora_inicio, aceptados, rechazados, detalle FROM registro_ejecuciones WHERE fuente = 'profeco' ORDER BY fecha_hora_inicio DESC LIMIT 1;
+   ```
+Para pruebas locales hay una muestra recortada: `scripts/extraer_muestra_profeco.py` la regenera desde el CSV completo.

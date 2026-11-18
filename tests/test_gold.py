@@ -9,6 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pyarrow as pa
+import pytest
 
 from transformacion import gold
 from transformacion.silver_chat import ESQUEMA_PRECIOS
@@ -118,7 +119,7 @@ def test_precios_en_pieza_no_cuentan_para_el_costo():
 def test_precio_insumo_semanal_del_proveedor():
     t = calcular()["precio_insumo_semanal"]
     pastor = [f for f in filas(t) if f["insumo"] == "pastor"]
-    assert [(f["semana_iso"], f["precio_kg"], f["n_observaciones"]) for f in pastor][:3] == [
+    assert [(f["semana_iso"], f["precio"], f["n_observaciones"]) for f in pastor][:3] == [
         (1, D("150.00"), 1), (2, D("150.00"), 0), (3, D("155.00"), 1)]
     assert {(f["fuente"], f["estadistico"]) for f in pastor} == {("proveedor", "ultimo_vigente")}
 
@@ -146,7 +147,7 @@ def test_mes_sin_inpc_deja_la_comparacion_vacia_pero_conserva_el_indice():
 def test_sin_datos_devuelve_tablas_vacias():
     g = gold.calcular_gold(precios(), RECETA, None)
     assert all(t.num_rows == 0 for t in g.values())
-    assert set(g) == {"costo_taco_semanal", "precio_insumo_semanal", "comparativo_inflacion", "contribucion_insumo"}
+    assert set(g) == {"costo_taco_semanal", "precio_insumo_semanal", "comparativo_inflacion", "contribucion_insumo", "comparativo_proveedor"}
 
 
 def test_calculo_determinista():
@@ -226,3 +227,41 @@ def test_una_serie_de_alimentos_sin_el_mes_base_queda_vacia():
     todo = varias(INPC, inpc((date(2026, 2, 1), "206.0"), serie="SP66540"))  # falta enero (el mes base)
     feb = [f for f in filas(calcular(inpc=todo)["comparativo_inflacion"]) if f["tipo_taco"] == "pastor" and f["mes"] == 2][0]
     assert feb["inpc_alimentos_base100"] is None
+
+
+# --- P2: proveedor contra el mercado (PROFECO) --------------------------------------
+
+def _mercado(*filas):
+    """filas: (insumo, año, semana, canal, precio, unidad, equivalencia)."""
+    from transformacion.silver_mercado import ESQUEMA_MERCADO
+    base = {"fecha_registro": date(2026, 1, 5), "producto_original": "x", "presentacion": "p", "marca": "", "cadena_comercial": "",
+            "nombre_comercial": "", "direccion": "", "municipio": "", "archivo_origen": "a.csv", "fecha_ingesta": date(2026, 11, 18)}
+    return pa.Table.from_pylist([{**base, "insumo": i, "anio": a, "semana_iso": s, "canal": c, "precio": D(p), "precio_kg": D(p) if u == "kg" else None,
+                                  "unidad": u, "equivalencia": e} for i, a, s, c, p, u, e in filas], schema=ESQUEMA_MERCADO)
+
+
+def test_el_mercado_semanal_es_la_mediana_por_canal_y_unidad():
+    m = _mercado(("pastor", 2026, 1, "menudeo", "100", "kg", "proxy"), ("pastor", 2026, 1, "menudeo", "110", "kg", "proxy"),
+                 ("pastor", 2026, 1, "menudeo", "130", "kg", "proxy"), ("cilantro", 2026, 1, "menudeo", "10", "manojo", "exacta"))
+    t = {(f["insumo"], f["fuente"]): f for f in filas(calcular(mercado=m)["precio_insumo_semanal"]) if f["fuente"] != "proveedor"}
+    assert (t[("pastor", "menudeo")]["precio"], t[("pastor", "menudeo")]["n_observaciones"], t[("pastor", "menudeo")]["unidad"]) == (D("110.00"), 3, "kg")
+    assert (t[("cilantro", "menudeo")]["precio"], t[("cilantro", "menudeo")]["unidad"], t[("cilantro", "menudeo")]["estadistico"]) == (D("10.00"), "manojo", "mediana")
+
+
+def test_p2_brecha_diagnostico_y_aproximado():
+    p = [f for f in filas(calcular(mercado=_mercado(("pastor", 2026, 1, "menudeo", "100", "kg", "proxy"),
+                                                    ("pastor", 2026, 1, "mayoreo", "120", "kg", "proxy")))["comparativo_proveedor"])]
+    assert len(p) == 1 and p[0]["insumo"] == "pastor" and p[0]["precio_proveedor_kg"] == D("150.00")
+    assert (p[0]["brecha_menudeo_pct"], p[0]["brecha_mayoreo_pct"], p[0]["aproximado"], p[0]["diagnostico"]) == (D("50.00"), D("25.00"), True, "caro")
+
+
+@pytest.mark.parametrize("precio_mercado,diagnostico", [("100", "caro"), ("136.36", "en rango"), ("150", "en rango"), ("165", "en rango"), ("200", "barato")])
+def test_p2_umbral_del_diagnostico(precio_mercado, diagnostico):
+    f = filas(calcular(mercado=_mercado(("pastor", 2026, 1, "menudeo", precio_mercado, "kg", "exacta")))["comparativo_proveedor"])[0]
+    assert f["diagnostico"] == diagnostico and f["aproximado"] is False
+
+
+def test_p2_sin_mercado_en_esa_semana_no_hay_fila_y_un_manojo_no_se_compara_con_un_kilo():
+    assert calcular()["comparativo_proveedor"].num_rows == 0
+    m = _mercado(("pastor", 2026, 1, "menudeo", "100", "manojo", "exacta"), ("pastor", 2026, 40, "menudeo", "100", "kg", "exacta"))
+    assert calcular(mercado=m)["comparativo_proveedor"].num_rows == 0

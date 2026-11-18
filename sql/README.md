@@ -35,6 +35,19 @@ Esto **no** respalda el «30 %» que menciona la dueña (A1): el dato del provee
 **Cómo leer las dos columnas nuevas:** «Alimentos» (`SP66540`) es del índice *subyacente*: productos procesados, **sin** frutas, verduras ni carne fresca.
 «Pecuarios» (`SP56386`) es *no subyacente*, más volátil. Ninguna es «toda la comida». Si una serie falta, su columna sale vacía (sin dato), nunca en cero.
 
+## P2: ¿El proveedor cobra caro o barato frente al mercado? (`p2_proveedor_vs_mercado.sql`)
+
+PROFECO (CSV de julio, **solo 16 al 31 de julio de 2026**: semanas 29 a 31). Brecha del proveedor contra la mediana de CDMX:
+
+| insumo | menudeo ($/kg) | brecha menudeo | diagnóstico | aproximado |
+| :---- | ----: | ----: | :---- | :---- |
+| longaniza | 114.00 | +2.6 % | en rango | no |
+| pastor | 108.00 | +41.7 % | caro | sí (pierna sin hueso) |
+| suadero | 231.00 | −24.7 % | barato | sí (falda de res) |
+
+**Lectura:** son datos sintéticos del proveedor contra precios reales de mercado: sirven para probar el cálculo, no para opinar de la taquería.
+«Caro» o «barato» = más de 10 % arriba o abajo del menudeo ([ADR 0022](../docs/adr/0022-p2-mercado-unidades-y-diagnostico.md)). Fuera de esas tres semanas no hay comparación: sale «sin dato».
+
 ## P3: ¿Qué insumo explica el aumento de costos? (`p3_contribucion.sql`)
 
 Trimestre 2026Q3 (último con datos):

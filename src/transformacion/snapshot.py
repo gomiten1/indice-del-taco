@@ -20,7 +20,7 @@ from transformacion.almacen import AlmacenLocal, AlmacenS3
 TABLAS_GOLD = ("costo_taco_semanal", "precio_insumo_semanal", "comparativo_inflacion", "contribucion_insumo", "comparativo_proveedor")
 COLUMNAS_PRIVADAS = {"precio_proveedor_kg"}
 # P2 todavía no existe en gold (necesita PROFECO): el CSV queda con encabezado y sin filas, que el dashboard muestra como "aún sin datos".
-ENCABEZADO_SIN_DATOS = {"comparativo_proveedor": "anio,semana,insumo,brecha_vs_mercado_pct,diagnostico"}
+ENCABEZADO_SIN_DATOS = {"comparativo_proveedor": "anio,semana_iso,insumo,precio_menudeo_kg,precio_mayoreo_kg,brecha_menudeo_pct,brecha_mayoreo_pct,aproximado,diagnostico"}
 
 
 def leer_gold(almacen) -> dict[str, pa.Table | None]:

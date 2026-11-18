@@ -10,11 +10,11 @@ import json
 from datetime import date
 from pathlib import Path
 
-from transformacion import gold, parquet, silver_chat, silver_inpc, silver_receta
+from transformacion import gold, parquet, silver_chat, silver_inpc, silver_mercado, silver_receta
 from transformacion.almacen import AlmacenLocal
 
 
-def correr(chat: Path, receta: Path, inpc, fecha_ingesta: date, salida: Path, ejecucion_id: str = "local") -> dict:
+def correr(chat: Path, receta: Path, inpc, fecha_ingesta: date, salida: Path, ejecucion_id: str = "local", profeco=()) -> dict:
     """`inpc`: un archivo JSON de Banxico o una lista de ellos (una serie por archivo; SP1 es la obligatoria)."""
     salida = Path(salida)
     inpc = [Path(inpc)] if isinstance(inpc, (str, Path)) else [Path(x) for x in inpc]
@@ -25,10 +25,20 @@ def correr(chat: Path, receta: Path, inpc, fecha_ingesta: date, salida: Path, ej
     silver_inpc.escribir(i, silver, cuarentena)
     r = silver_receta.procesar_receta(Path(receta).read_text(encoding="utf-8"), Path(receta).name, fecha_ingesta, ejecucion_id)
     silver_receta.escribir(r, silver, cuarentena)
-    tablas = gold.calcular_gold(c.precios, r.receta, i.inpc)
+    m, resumen_silver = None, {"chat": c.resumen, "banxico": i.resumen, "receta": r.resumen}
+    if profeco:  # opcional: los CSV de PROFECO se cargan a mano (ADR 0020)
+        archivos = [Path(x) for x in ([profeco] if isinstance(profeco, (str, Path)) else profeco)]
+        resultados = []
+        for x in archivos:
+            with x.open("rb") as f:
+                resultados.append(silver_mercado.procesar_profeco(f, x.name, fecha_ingesta, ejecucion_id))
+        m = silver_mercado.combinar(resultados)
+        silver_mercado.escribir(m, silver, cuarentena)
+        resumen_silver["profeco"] = m.resumen
+    tablas = gold.calcular_gold(c.precios, r.receta, i.inpc, mercado=m.mercado if m else None)
     for nombre, tabla in tablas.items():
         parquet.escribir_simple(destino, nombre, tabla)
-    return {"silver": {"chat": c.resumen, "banxico": i.resumen, "receta": r.resumen}, "gold": {n: t.num_rows for n, t in tablas.items()}}
+    return {"silver": resumen_silver, "gold": {n: t.num_rows for n, t in tablas.items()}}
 
 
 if __name__ == "__main__":
@@ -39,10 +49,12 @@ if __name__ == "__main__":
         Path("bronze_local/banxico/SP1/SP1_datos_2026-11-14.json"),
         Path("bronze_local/banxico/SP66540/SP66540_datos_2026-11-18.json"),
         Path("bronze_local/banxico/SP56386/SP56386_datos_2026-11-18.json")], help="un JSON de Banxico por serie")
+    ap.add_argument("--profeco", type=Path, nargs="*", default=[Path("bronze_local/profeco/csv/b07_2026_q2_muestra.csv")],
+                    help="CSV de PROFECO (sin argumentos: no se usa; por defecto, la muestra recortada)")
     ap.add_argument("--fecha-ingesta", type=date.fromisoformat, default=date(2026, 11, 16))
     ap.add_argument("--salida", type=Path, default=Path("data/lake"))
     a = ap.parse_args()
     if not (a.chat.exists() and a.receta.exists()):
         from datos_sinteticos.generador import escribir
         escribir(a.chat.parent)
-    print(json.dumps(correr(a.chat, a.receta, a.inpc, a.fecha_ingesta, a.salida), indent=2, default=str))
+    print(json.dumps(correr(a.chat, a.receta, a.inpc, a.fecha_ingesta, a.salida, profeco=a.profeco), indent=2, default=str))
