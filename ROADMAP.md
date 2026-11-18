@@ -40,7 +40,7 @@ El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver 
 | Qué | Nota |
 | :---- | :---- |
 | **P2 y P3 completos** | Necesitan los CSV de PROFECO, que hay que bajar a mano: ver [Datos que faltan, §1](#1-profeco-precios-de-mercado-lo-más-importante) |
-| Inflación de alimentos (N4) | Falta la clave de la serie en Banxico: ver [Datos que faltan, §2](#2-inflación-de-alimentos-banxico-e-inegi) |
+| Inflación de alimentos (N4) | Falta la clave de la serie en Banxico (está en la estructura CP154 del SIE): ver [Datos que faltan, §2](#2-inflación-de-alimentos-banxico-e-inegi) |
 | Script de despliegue | Reemplazar los comandos sueltos por uno reproducible y unificar plantillas (00 a 07) |
 | CI en GitHub | `pytest` y `cfn-lint` en cada PR (el CD con OIDC se decide después) |
 | Imagen del diagrama | La de Diagramon sigue mostrando una VPC y eventos de S3; el diagrama vigente es el del README |
@@ -128,19 +128,31 @@ con un archivo real, la **repetición de la prueba Parquet contra CSV** ([`docs/
 
 **Estado verificado el 18/11:**
 - Banxico `SP1` (INPC general) funciona; es la que se usa hoy.
-- Se barrieron las series `SP1` a `SP140` y `SP74560` a `SP74720` buscando alimentos: **no aparece**. Lo que existe en esos rangos es otra cosa:
-  `SP103` es gasolina (misma familia que `SP1`, «IPC por objeto del gasto Nacional»), y `SP74625` a `SP74640` son subyacente y no subyacente.
+- Se barrieron las series `SP1` a `SP140` y `SP74000` a `SP75499` por la API sin encontrar las de alimentos. Lo que existe en esos rangos es otra cosa:
+  `SP103` es gasolina (familia de `SP1`, «IPC por objeto del gasto Nacional») y `SP74625` a `SP74640` son subyacente, servicios y energéticos.
 - INEGI: el token funciona, pero el catálogo que tenemos es el de BISE, que **no incluye el INPC**; el del banco BIE responde `110 No autorizado` con nuestro token.
 
-**Cómo conseguir la clave (la opción recomendada, Banxico):**
-1. Entrar al Sistema de Información Económica (SIE) en banxico.org.mx.
-2. Ir a *Precios e inflación* → *Índices de precios al consumidor* → INPC **por objeto del gasto**, y elegir el grupo **«Alimentos, bebidas y tabaco»**.
-3. En la ficha de la serie aparece su **clave** (con forma `SPxxxxx`, como `SP1`). Debe ser mensual y de la misma familia que el índice general.
-4. Pasármela. Opcionalmente, anotar también la de **«Agropecuarios / Pecuarios»** (carne y huevo), que se parece más al taco que el grupo completo.
-5. Comprobarla antes de pasármela:
+**Dónde está (verificado leyendo el SIE el 18/11):** no en «por objeto del gasto», sino en el sector **«Índices de Precios al Consumidor y UDIS»**,
+estructura **«Principales índices mensuales» (CP154)**, dentro de *Subíndices subyacente y complementarios*. Ahí aparecen los rubros que necesitamos:
+**«Alimentos, Bebidas y Tabaco»** (bajo *Mercancías*), **«Agropecuarios»** y **«Pecuarios»** (bajo *No subyacente*).
+Enlace directo: <https://www.banxico.org.mx/SieInternet/consultarDirectorioInternetAction.do?sector=8&accion=consultarCuadro&idCuadro=CP154&locale=es>
+
+**Por qué hay que hacerlo a mano:** el texto de la página trae los nombres pero **no las claves** (se muestran con botones), y probando números en la API solo se
+encuentran 8 de esos subíndices (`SP74625` a `SP74631` y `SP74640`: subyacente, mercancías, servicios y energéticos; no los de alimentos).
+
+**Pasos:**
+1. Abrir el enlace de arriba (o entrar a <https://www.banxico.org.mx/SieInternet/> → «Índices de Precios al Consumidor y UDIS» → «Principales índices mensuales»).
+2. Buscar el rubro **«Alimentos, Bebidas y Tabaco»**. Junto a cada serie hay botones; usar **«Mostrar metadatos de la serie»** (el de «Seleccionar serie» también sirve).
+3. Copiar la **clave** (forma `SPxxxxx`), la periodicidad (debe ser **mensual**) y la fecha final (octubre de 2026).
+4. Repetir con **«Pecuarios»** (el más cercano a la carne; no se verificó qué productos incluye) y, si se quiere, **«Agropecuarios»**.
+5. Pasarme las claves. Comprobarlas antes con:
    ```bash
-   curl -s -H "Bmx-Token: $BANXICO_TOKEN" "https://www.banxico.org.mx/SieAPIRest/service/v1/series/SPxxxxx"   # debe traer titulo, Mensual y fechaFin reciente
+   curl -s -H "Bmx-Token: $BANXICO_TOKEN" "https://www.banxico.org.mx/SieAPIRest/service/v1/series/SPxxxxx"   # debe traer titulo (con «Alimentos…» o «Pecuarios»), Mensual y fechaFin reciente
    ```
+
+**Qué mide cada una (para elegir):** «Alimentos, Bebidas y Tabaco» está dentro del **subyacente** (productos procesados: no incluye frutas, verduras ni carne fresca);
+«Pecuarios» y «Agropecuarios» están en el **no subyacente** (más volátiles). Para N4 («inflación de alimentos») lo razonable es mostrar «Alimentos, Bebidas y Tabaco» y
+dejar «Pecuarios» como segunda línea. Hay que dejarlo escrito en el dashboard, porque ninguna es «toda la comida».
 
 **Lo que hago yo con la clave** (roadmap 1.7 y 3.3): la Lambda de Banxico ya acepta varias series (`BANXICO_SERIES`); falta que silver guarde cada serie y que gold llene
 `inpc_alimentos_base100`, con sus pruebas y el despliegue. Cierra la parte de alimentos de N4.
@@ -195,7 +207,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 1.4 | ⬜ | PROFECO: **bajar a mano** al menos `b07_2026_q2.csv` (idealmente julio y junio) y cargarlos a bronze como `raw/profeco/csv/bMM_AAAA_qN.csv`. Pasos en «Datos que faltan §1» | D |
 | 1.5 | ✅ | Buckets silver, gold, cuarentena y artefactos | D |
 | 1.6 | ⬜ | Lambda de INEGI (se descarta por ahora, ADR 0018; solo contrastaría el INPC). Ver «Datos que faltan §2» | X |
-| 1.7 | ⬜ | Serie de inflación de alimentos de Banxico: **falta la clave** (se barrieron `SP1` a `SP140` y `SP74560` a `SP74720` sin encontrarla). Cómo conseguirla en «Datos que faltan §2» | D |
+| 1.7 | ⬜ | Serie de inflación de alimentos de Banxico: **falta la clave**: está en la estructura CP154 del SIE («Alimentos, Bebidas y Tabaco» y «Pecuarios»); no se puede sacar probando números. Pasos en «Datos que faltan §2» | D |
 
 ### Fase 2 · Silver y calidad
 
