@@ -6,9 +6,66 @@ El alcance y los criterios de aceptación siguen siendo los del [SOW](docs/consu
 
 Leyenda: ✅ hecho y verificado · 🔶 parcial o hecho sin verificar del todo · ⬜ pendiente · **D** debe · **S** debería · **X** después.
 
+## Para terminar: lista para quien continúe
+
+Todo lo de abajo está **sin hacer**, ordenado de más a menos urgente. Lo construido y verificado está en [Estado](#estado-al-1811); el detalle técnico, en `docs/runbook.md` y `infra/README.md`. Fecha límite: **27/11**.
+
+### A. Esta semana (desbloquea lo demás)
+
+| # | Qué hacer | Cómo se sabe que está listo |
+| :---- | :---- | :---- |
+| A1 | **Hacer push de `feat/profeco-silver-p2` y abrir el PR** (silver de PROFECO, P2 y los ADR 0020 a 0022); revisión de otra persona | PR fusionado y CI en verde (confirma la tarea 4.7) |
+| A2 | **SNS:** aceptar el correo de confirmación o reenviarlo; decidir quién recibe las alertas | `list-subscriptions` sin «PendingConfirmation». La pendiente expira ≈ 19/11 04:32 UTC |
+| A3 | **Ver correr solo el schedule** el lunes 23/11 6:00 CDMX (y una segunda corrida el 30/11 si hay tiempo) | Dos filas `ok` en `registro_ejecuciones` sin intervención (E5) |
+| A4 | **Enviar a la dueña** las aclaraciones A1 a A6 y las preguntas 1 a 8 de [`aclaraciones.md`](docs/consultoria/aclaraciones.md) | Respuestas anotadas con fecha. Las dos que bloquean cosas: **7** (umbral ±10 % de P2) y **8** (gramos por taco y peso del manojo) |
+| A5 | **Asignar responsables** (sección «Responsables» de abajo) | Tabla llena |
+
+### B. Operación y reproducibilidad
+
+| # | Qué hacer | Cómo se sabe que está listo |
+| :---- | :---- | :---- |
+| B1 | **Script de despliegue** (`scripts/desplegar.sh`) que reemplace los comandos sueltos de `infra/README.md`; unificar las plantillas 00 a 07 si conviene | Un solo comando crea todo desde cero |
+| B2 | **Prueba destruir → desplegar** (N6, E6). Cuidado: borrar el stack de orquestación borra el tema SNS y sus suscripciones; los buckets son `Retain` | Todo recreado y una corrida `ok`; anotar el tiempo |
+| B3 | **Prueba de recálculo desde bronze** (3.6): borrar silver y gold, relanzar, comparar con el snapshot | Resultado idéntico |
+| B4 | **Alarma real:** provocar un error del orquestador para ver una alarma pasar a ALARM y un correo con su hora; guardar la captura (cierra 4.3) | Captura en `docs/` |
+| B5 | **Gasto real:** activar la etiqueta `project` en Billing y anotar el valor de Cost Explorer en `docs/costos.md` §3 | Cifra con fecha |
+| B6 | **Confirmar región y límite de gasto** en AWS Settings. La región es `us-east-2` y **probablemente no se puede cambiar** (la fija la dirección de contacto, ADR 0010); si se pudiera, hay que rehacer todo (haz B1 y B2 antes) | Nota en el ADR 0010 |
+| B7 | Mínimo privilegio: probar que cada Lambda **no** puede hacer lo que no debe (4.6) | Prueba anotada |
+
+### C. Producto y entrega
+
+| # | Qué hacer | Cómo se sabe que está listo |
+| :---- | :---- | :---- |
+| C1 | **Decidir público o privado** el dashboard: el RFP §7 dice «privado y de acceso seguro»; el SOW §6 y el ADR 0001 dicen público. Propuesta: público mientras los datos sean sintéticos, con ADR y visto bueno de la dueña | ADR escrito |
+| C2 | **Publicar el dashboard** en Streamlit Community Cloud (`dashboard/app.py`, lee `snapshot_gold/`); agregar un aviso visible de que **los datos del proveedor son sintéticos** | URL pública abierta sin login |
+| C3 | **Corregir la imagen del diagrama** (quitar la VPC y los eventos de S3; poner orquestador, PROFECO manual y la región real; INEGI fuera) o usar el Mermaid del README | Imagen actualizada |
+| C4 | **README final** con hallazgos (taco +12.3 % contra INPC +1.7 %, P2) y aprendizajes | Revisado por el equipo |
+| C5 | **Presentación de 10 minutos y video demo de 3 a 5 minutos** | Archivos en el repo o enlace |
+| C6 | **Prueba de N7 con la dueña:** 4 preguntas en menos de 5 minutos y acta de entrega | Acta firmada |
+
+### D. Datos (cuando se consigan)
+
+| # | Qué hacer | Cómo |
+| :---- | :---- | :---- |
+| D1 | **Más quincenas de PROFECO** (junio y primera de julio) para ampliar P2 | Runbook §9; cada CSV se sube a `raw/profeco/fecha_ingesta=.../` y se relanza el orquestador |
+| D2 | **Gramos por taco de tortilla, cebolla, cilantro, limón y piña** (y peso de un manojo) | Respuesta de la dueña (A4/pregunta 8); agregar filas a `receta.csv`; P3 se completa solo |
+| D3 | **Datos reales** del chat del proveedor y ventas | Sustituyen a los sintéticos; revisar el riesgo de privacidad del ADR 0012 antes de publicar |
+| D4 | **Aprobaciones escritas de la dueña** de los ADR 0011, 0015, 0018 y 0022 (SOW §11) | Anotarlas en cada ADR |
+
+### E. Opcionales (solo si sobra tiempo)
+
+- Despliegue automático desde GitHub: OIDC está bloqueado en esta cuenta; opciones en «Pendientes de decidir» (CodeBuild con CodeConnections, CodePipeline, o CI más script).
+- INEGI como contraste del INPC (tarea 1.6).
+- Corregir el respaldo de merma del dashboard (`× 1.12` debería ser `÷ 0.88`; solo se usa si faltan las filas con merma).
+- Decidir si `bronze_local/` (≈ 4.6 MB con la muestra de PROFECO) se queda en git; `CLAUDE.md` está sin versionar a propósito.
+
+### Qué no se recorta
+
+Idempotencia, cuarentena, alerta con falla simulada, IaC y que el dashboard no exponga datos sensibles. Si falta tiempo, se recorta en el orden de «Línea de corte».
+
 ## Estado al 18/11
 
-El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver → gold → Athena**, orquestado cada lunes a las 6:00 (CDMX), con registro de ejecuciones, alertas por correo y un **dashboard de Streamlit** que lee un snapshot de gold. Responde **P1** y **P4** con datos sintéticos y el INPC real de Banxico; **P2** no tiene datos (falta PROFECO) y **P3** solo trae la carne con valor.
+El pipeline funciona de punta a punta en AWS (`us-east-2`): **bronze → silver → gold → Athena**, orquestado cada lunes a las 6:00 (CDMX), con registro de ejecuciones, alertas por correo y un **dashboard de Streamlit** que lee un snapshot de gold. Responde **P1**, **P2** y **P4** con datos sintéticos del proveedor, el INPC real de Banxico y precios reales de PROFECO (**solo del 16 al 31 de julio de 2026**, ADR 0020); **P3** solo trae la carne con valor porque la receta no tiene más insumos.
 
 ### Hecho
 
@@ -177,7 +234,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 0.3 | ✅ | Contratos de datos: `docs/diccionario_datos.md` v0 (falta revisión del equipo) | D |
 | 0.4 | ✅ | ADRs críticos: 22 escritos, entre ellos capas (0002), CloudFormation (0004), Streamlit (0006), PROFECO y SNIIM (0011), orquestación (0013) y proxies (0015); todos provisionales | D |
 | 0.5 | ⬜ | Reparto real de tareas por persona; cada cambio entra por PR revisado por otra persona (SOW §7) | D |
-| 0.6 | 🔶 | Receta fijada (55 g y 50 g); faltan tortilla, verduras y la aprobación de equivalencias; enviar las aclaraciones A1 a A6 | D |
+| 0.6 | 🔶 | Receta fijada (55 g y 50 g); faltan tortilla, verduras y cilantro (gramos por taco) y la aprobación de equivalencias; enviar las aclaraciones A1 a A8 | D |
 | 0.7 | ✅ | Brief ausente: se reconstruyó y se documentó en el ADR 0007 | D |
 
 ### Fase 1 · Datos de entrada
@@ -226,7 +283,7 @@ Un pipeline pequeño que corre de punta a punta vale más que cinco capas a medi
 | 4.4 | 🔶 | Plantillas 00 a 07 desplegadas; falta unificarlas, el script y la prueba destruir → desplegar | D |
 | 4.5 | ✅ | Runbook por alerta (`docs/runbook.md`, con los nombres reales) | D |
 | 4.6 | 🔶 | Un rol de mínimo privilegio por Lambda ya definido; falta la prueba de permisos | D |
-| 4.7 | ⬜ | CI en GitHub (`pytest` y `cfn-lint` por PR) | S |
+| 4.7 | 🔶 | CI en GitHub (`.github/workflows/ci.yml`: `pytest`, `cfn-lint` y snapshot al día) escrito; falta confirmar que corre en verde en un PR | S |
 
 ### Fase 5 · Producto y entrega
 
