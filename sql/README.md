@@ -29,6 +29,21 @@ se declaran en `infra/06-glue-athena.yaml` (DDL manual, sin crawlers; las partic
 ~10.6 puntos más que la inflación. El salto está en abril (+8 % en un mes). Esto **no** respalda el "30 %" que menciona la
 dueña (A1): el dato del proveedor da ≈12 %.
 
+## P3: ¿Qué insumo explica el aumento de costos? (`p3_contribucion.sql`)
+
+Trimestre 2026Q3 (último con datos):
+
+| tipo_taco | ranking | insumo | aportación ($ por taco) | aportación (%) | estado |
+| :---- | ----: | :---- | ----: | ----: | :---- |
+| pastor | 1 | pastor | 0.10 | 100.00 | ok |
+| pastor | 2 a 6 | tortilla, cebolla, cilantro, limón, piña | | | sin dato |
+| suadero | 1 | suadero | 0.61 | 100.00 | ok |
+| suadero | 2 a 5 | tortilla, cebolla, cilantro, limón | | | sin dato |
+
+**Lectura:** en el tercer trimestre la carne subió $0.10 por taco de pastor y $0.61 por taco de suadero. Hoy la carne aparece con 100 %
+solo porque **es el único insumo con precio**; los demás figuran como «sin dato» (no como 0 %) hasta que haya precios de mercado (PROFECO).
+Escanea menos de 1 KB.
+
 ## Pendientes
-- **P2** (proveedor contra el mercado) y **P3** (qué insumo explica el aumento) necesitan los precios de PROFECO.
+- **P2** (proveedor contra el mercado) necesita los precios de PROFECO, y **P3** solo será informativa con más de un insumo.
 - La inflación de alimentos (N4) falta: hay que encontrar la serie (tarea 1.7 del roadmap).

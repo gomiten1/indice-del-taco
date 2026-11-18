@@ -1,0 +1,35 @@
+name: CI
+
+# Corre en cada PR y en cada push a main. No usa credenciales de AWS ni secretos: todo es local.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Pruebas (pytest)
+        run: pytest -q
+
+      - name: Validar plantillas de CloudFormation (cfn-lint)
+        run: cfn-lint infra/*.yaml
+
+      - name: El snapshot del repo coincide con lo que calcula el código
+        # Regenera todo en local (datos sintéticos con semilla fija) y falla si snapshot_gold/ quedó desactualizado.
+        run: |
+          PYTHONPATH=.:src python -m transformacion.pipeline_local > /dev/null
+          PYTHONPATH=.:src python -m transformacion.snapshot > /dev/null
+          git diff --exit-code -- snapshot_gold

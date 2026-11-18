@@ -28,7 +28,7 @@ Al operar bajo una arquitectura 100 % *serverless* sin servidores EC2, bases de 
 
 1. **Tope de escaneo en Athena (`100 MB`):** Configurado en `infra/06-glue-athena.yaml` (`BytesScannedCutoffPerQuery: 104857600`) para bloquear cualquier consulta mal formada antes de generar cargos.
 2. **Etiquetado de recursos (`Tags`):** Todos los recursos creados por CloudFormation incluyen las etiquetas `project=indice-del-taco` y `environment=dev` para filtrar el gasto real en **AWS Cost Explorer**.
-3. **Presupuesto y alertas (`AWS Budgets`):** **Pendiente de crear** (ninguna plantilla lo hace): AWS Billing and Cost Management → Budgets, mensual, con avisos al **50 %** y **80 %**. El límite de gasto de la cuenta se revisa en AWS Settings → Billing.
+3. **Presupuesto y alertas (`AWS Budgets`):** **creado a mano** (no está en CloudFormation) y verificado el 18/11: `presupuesto-indice-del-taco`, **10 USD al mes** (≈ $200 MXN, bajo el tope de $250 MXN del SOW), con avisos sobre el gasto real al **50 %** y **80 %**. La cuenta tiene además un Budget de 1 USD (`My Zero-Spend Budget`). El límite de gasto de la cuenta se revisa en AWS Settings → Billing.
 4. **Ciclo de vida en S3 (`LifecycleConfiguration`):** Purga automática de versiones no actuales a los 30 días (bronze, silver, gold, cuarentena y artefactos) y caducidad a los 7 días de los resultados de Athena. *(No se configuró la limpieza de cargas multiparte incompletas; es una mejora posible.)*
 
 ---
@@ -36,4 +36,4 @@ Al operar bajo una arquitectura 100 % *serverless* sin servidores EC2, bases de 
 ## 3. Verificación de gasto real (AWS Cost Explorer)
 
 * **Crédito disponible en cuenta:** $120.00 USD (vigencia hasta 2027-05-16).
-* **Gasto acumulado:** **sin medir todavía.** Falta anotar el valor de AWS Cost Explorer (filtrando por la etiqueta `project=indice-del-taco`, que hay que activar como etiqueta de costos en Billing) y crear el Budget.
+* **Gasto acumulado:** **sin medir todavía.** Falta anotar el valor de AWS Cost Explorer (filtrando por la etiqueta `project=indice-del-taco`, que hay que activar como etiqueta de costos en Billing).

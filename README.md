@@ -45,9 +45,47 @@ El catálogo completo, con las pruebas de cada fuente, está en [`docs/fuentes.m
 
 ## Arquitectura
 
-![Arquitectura](docs/img/indice-del-taco-avance.png)
+```mermaid
+flowchart LR
+    subgraph Fuentes
+        BX["Banxico SIE<br/>INPC"]
+        CH["Chat del proveedor<br/>.txt (sintético)"]
+        RC["Receta<br/>.csv (sintética)"]
+        PF["PROFECO<br/>CSV manual (pendiente)"]
+    end
 
-Arquitectura serverless en capas (medallón). EventBridge Scheduler dispara cada lunes a las 6:00 (CDMX) una Lambda orquestadora que invoca en orden la ingesta de Banxico, silver y gold, registra cada etapa en `registro_ejecuciones` y avisa por SNS si algo falla o hay datos sospechosos ([ADR 0013](docs/adr/0013-orquestacion-eventbridge-y-lambda.md)). *El diagrama de arriba es una versión anterior (muestra una VPC y disparos por eventos de S3): está pendiente de actualizar.*
+    SCH["EventBridge Scheduler<br/>lunes 6:00 CDMX"] --> ORQ["Lambda orquestador"]
+    ORQ --> L1["Lambda ingesta<br/>Banxico"]
+    ORQ --> L2["Lambda silver"]
+    ORQ --> L3["Lambda gold"]
+
+    BX --> L1
+    L1 --> BR[("S3 bronze<br/>datos originales")]
+    CH -->|carga manual| BR
+    RC -->|carga manual| BR
+    PF -.->|carga manual| BR
+
+    BR --> L2
+    L2 --> SI[("S3 silver<br/>Parquet")]
+    L2 --> Q[("S3 cuarentena")]
+    SI --> L3
+    L3 --> GO[("S3 gold<br/>tablas de negocio")]
+
+    SI --- GL["Glue Data Catalog"]
+    GO --- GL
+    GL --- AT["Athena<br/>consultas SQL"]
+
+    GO -->|"transformacion.snapshot"| SN["snapshot_gold/<br/>CSV en el repo"]
+    SN --> DASH["Dashboard<br/>Streamlit"]
+
+    ORQ -->|"registro_ejecuciones"| SI
+    ORQ -.->|"falla o datos sospechosos"| SNS["SNS<br/>correo"]
+    CW["Alarmas<br/>CloudWatch"] -.-> SNS
+```
+
+*Los trazos punteados son avisos o cargas pendientes. La imagen [`docs/img/indice-del-taco-avance.png`](docs/img/indice-del-taco-avance.png) es una versión anterior (dibuja una VPC y disparos por eventos de S3) y no refleja lo construido.*
+
+Arquitectura serverless en capas (medallón). EventBridge Scheduler dispara cada lunes a las 6:00 (CDMX) una Lambda orquestadora que invoca en orden la ingesta de Banxico, silver y gold, registra cada etapa en `registro_ejecuciones` y avisa por SNS si algo falla o hay datos sospechosos ([ADR 0013](docs/adr/0013-orquestacion-eventbridge-y-lambda.md)).
 
 | Capa | Contenido | Para qué sirve |
 | :---- | :---- | :---- |
@@ -60,7 +98,7 @@ Tablas gold: `costo_taco_semanal`, `precio_insumo_semanal`, `comparativo_proveed
 ## Decisiones de diseño
 
 - **Serverless y por eventos:** sin servidores encendidos; el costo esperado está dentro del free tier de AWS.
-- **Parquet particionado + Athena:** Athena cobra por datos escaneados, así que leer menos datos reduce el costo. [EN CONSTRUCCIÓN] *Comparación de bytes escaneados CSV vs. Parquet: pendiente (H3).*
+- **Parquet particionado + Athena:** Athena cobra por datos escaneados, así que leer menos datos reduce el costo. En una prueba con el esquema de PROFECO (200 mil filas sintéticas), Parquet escaneó entre **98 % y 100 % menos** bytes que CSV con las mismas respuestas ([`docs/parquet-vs-csv.md`](docs/parquet-vs-csv.md)).
 - **Reprocesamiento idempotente:** volver a procesar una semana no duplica registros ni cambia el histórico.
 - **Dashboard público sin login:** lee un *snapshot* de las tablas gold, sin precios de compra exactos; los datos del proveedor se quedan en S3 privado. El snapshot permite que el dashboard siga funcionando aunque la cuenta de AWS ya no exista.
 - **Infraestructura como código con CloudFormation.**
@@ -172,13 +210,13 @@ Con los datos sintéticos, de enero a septiembre el costo de la carne por taco s
 
 ## Avance
 
-- [ ] H0 · Arranque *(parcial: falta el Budget de AWS)*
+- [ ] H0 · Arranque *(parcial: falta confirmar la región y el límite de gasto en AWS Settings)*
 - [x] H1 · La bodega, a mano
 - [ ] H2 · Ingesta automatizada *(Banxico y chat listos; falta PROFECO)*
 - [ ] H3 · Silver y SQL *(falta PROFECO y la comparación CSV vs Parquet)*
 - [ ] H4 · Gold e Índice del Taco *(P1 y P4 listos; P2 y P3 incompletas)*
 - [ ] H5 · Orquestación *(desplegada; falta ver dos corridas automáticas)*
-- [ ] H6 · Observabilidad y calidad *(alertas probadas por una compañera; falta la evidencia)*
+- [ ] H6 · Observabilidad y calidad *(falla simulada probada el 17/11; falta la captura del correo)*
 - [ ] H7 · Infraestructura como código completa *(plantillas listas; falta el script y destruir → desplegar)*
 - [ ] H8 · Producto y entrega *(dashboard y snapshot listos; faltan URL pública, presentación y video)*
 
