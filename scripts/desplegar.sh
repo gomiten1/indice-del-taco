@@ -93,10 +93,12 @@ if [[ -z "${BANXICO_TOKEN:-}" ]]; then
   done
 fi
 if [[ -z "${BANXICO_TOKEN:-}" ]]; then
-  echo "BANXICO_TOKEN no esta en el entorno ni en .env; abortando." >&2
-  exit 1
+  echo "    aviso: BANXICO_TOKEN no esta en el entorno ni en .env; se salta la actualizacion del parametro SSM (se asume que ya existe de un despliegue previo)."
+  SKIP_BANXICO_TOKEN=1
+else
+  SKIP_BANXICO_TOKEN=0
+  ok "BANXICO_TOKEN cargado (longitud=${#BANXICO_TOKEN})"
 fi
-ok "BANXICO_TOKEN cargado (longitud=${#BANXICO_TOKEN})"
 
 if [[ -z "$ALERT_EMAIL" ]]; then
   echo "falta --alert-email <correo> (destino de las alertas SNS)" >&2
@@ -129,12 +131,16 @@ run aws cloudformation deploy \
 
 # -------------------------------------------------------------------- 2. token en SSM
 
-say "4/7  Token de Banxico en Parameter Store (SecureString)"
-run aws ssm put-parameter \
-  --name "/$PROJECT_NAME/$ENVIRONMENT/banxico_token" \
-  --type SecureString \
-  --value "'$BANXICO_TOKEN'" \
-  --overwrite
+if [[ "$SKIP_BANXICO_TOKEN" = "1" ]]; then
+  say "4/7  Token de Banxico en Parameter Store (OMITIDO: no se proveyo BANXICO_TOKEN)"
+else
+  say "4/7  Token de Banxico en Parameter Store (SecureString)"
+  run aws ssm put-parameter \
+    --name "/$PROJECT_NAME/$ENVIRONMENT/banxico_token" \
+    --type SecureString \
+    --value "'$BANXICO_TOKEN'" \
+    --overwrite
+fi
 
 # -------------------------------------------------------------------- 3. empaquetar y subir Lambdas
 

@@ -1,0 +1,86 @@
+name: CD
+
+# Despliega los 7 stacks de infra/ a AWS corriendo scripts/desplegar.sh.
+# Se dispara en push a main cuando cambien archivos que afectan al despliegue,
+# o manualmente desde la pestaña Actions (workflow_dispatch).
+#
+# OIDC esta bloqueado en la cuenta (ver ROADMAP). Se usa Access Key del
+# usuario IAM indice-taco-dev, cargada desde Secrets del repo:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, ALERT_EMAIL
+# BANXICO_TOKEN es opcional: si no esta, se salta el put-parameter en SSM
+# (asume que el token ya quedo guardado de un despliegue previo manual).
+#
+# El job corre en Ubuntu con el AWS CLI v2 ya instalado y Python 3.12.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "src/**"
+      - "scripts/desplegar.sh"
+      - ".github/workflows/cd.yml"
+  workflow_dispatch:
+    inputs:
+      alert_email:
+        description: "Correo para las alertas SNS (default: valor del secret ALERT_EMAIL)"
+        required: false
+        type: string
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    name: Desplegar a AWS (dev)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+      BANXICO_TOKEN: ${{ secrets.BANXICO_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verificar AWS CLI y credenciales
+        run: |
+          aws --version
+          aws sts get-caller-identity
+
+      - name: Elegir correo para alertas SNS
+        id: alert
+        run: |
+          email="${{ github.event.inputs.alert_email }}"
+          if [ -z "$email" ]; then
+            email="${{ secrets.ALERT_EMAIL }}"
+          fi
+          if [ -z "$email" ]; then
+            echo "falta ALERT_EMAIL (ni como input, ni como secret)" >&2
+            exit 2
+          fi
+          # No imprimir el correo entero en el log
+          echo "email=$email" >> "$GITHUB_OUTPUT"
+          echo "    correo definido (longitud=${#email})"
+
+      - name: Desplegar
+        run: ./scripts/desplegar.sh --alert-email "${{ steps.alert.outputs.email }}"
+
+      - name: Resumen
+        if: always()
+        run: |
+          echo "### Resultado del despliegue" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Rama: \`${{ github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Disparo: \`${{ github.event_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Region: \`${AWS_DEFAULT_REGION}\`" >> "$GITHUB_STEP_SUMMARY"
