@@ -18,13 +18,13 @@ Todo lo de abajo está **sin hacer**, ordenado de más a menos urgente. Lo const
 | A2 | **SNS:** aceptar el correo de confirmación o reenviarlo; decidir quién recibe las alertas | `list-subscriptions` sin «PendingConfirmation». La pendiente expira ≈ 19/11 04:32 UTC |
 | A3 | **Ver correr solo el schedule** el lunes 23/11 6:00 CDMX (y una segunda corrida el 30/11 si hay tiempo) | Dos filas `ok` en `registro_ejecuciones` sin intervención (E5) |
 | A4 | **Enviar a la dueña** las aclaraciones A1 a A6 y las preguntas 1 a 8 de [`aclaraciones.md`](docs/consultoria/aclaraciones.md) | Respuestas anotadas con fecha. Las dos que bloquean cosas: **7** (umbral ±10 % de P2) y **8** (gramos por taco y peso del manojo) |
-| A5 | **Asignar responsables** (sección «Responsables» de abajo) | Tabla llena |
+| A5 | ~~**Asignar responsables**~~ (sección «Responsables» de abajo) | ✅ tabla llena con propuesta inicial; ajustar en el PR si algo no cuadra |
 
 ### B. Operación y reproducibilidad
 
 | # | Qué hacer | Cómo se sabe que está listo |
 | :---- | :---- | :---- |
-| B1 | **Script de despliegue** (`scripts/desplegar.sh`) que reemplace los comandos sueltos de `infra/README.md`; unificar las plantillas 00 a 07 si conviene | Un solo comando crea todo desde cero |
+| B1 | ~~**Script de despliegue** (`scripts/desplegar.sh`)~~ que reemplace los comandos sueltos de `infra/README.md`; unificar las plantillas 00 a 07 si conviene | ✅ script listo, un solo comando despliega los 7 stacks; falta B2 (destruir → desplegar) para cerrar |
 | B2 | **Prueba destruir → desplegar** (N6, E6). Cuidado: borrar el stack de orquestación borra el tema SNS y sus suscripciones; los buckets son `Retain` | Todo recreado y una corrida `ok`; anotar el tiempo |
 | B3 | **Prueba de recálculo desde bronze** (3.6): borrar silver y gold, relanzar, comparar con el snapshot | Resultado idéntico |
 | B4 | **Alarma real:** provocar un error del orquestador para ver una alarma pasar a ALARM y un correo con su hora; guardar la captura (cierra 4.3) | Captura en `docs/` |
@@ -340,13 +340,13 @@ Si el 24/11 no están cerradas las fases 1 a 3, se recorta en este orden:
 
 ## Responsables
 
-*Por asignar en la tarea 0.5.*
+Propuesta inicial (tarea 0.5) para que cada quien sepa qué firmar. Ajusten en el PR si algo no cuadra.
 
 | Fase | Responsable | Apoyo |
 | :---- | :---- | :---- |
-| 0 | | |
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
+| 0 — Arranque / plataforma base (IAM, Budgets, cuenta) | Carlos | Gerardo |
+| 1 — Ingesta (Banxico, PROFECO, chat) | Fernanda | Carlos |
+| 2 — Silver / limpieza y calidad | Alejandro | Emilio |
+| 3 — Gold / modelado y cálculo del índice | Emilio | Alejandro |
+| 4 — Orquestación, alertas y observabilidad | Carlos | Emilio |
+| 5 — Dashboard, snapshot y entrega | Emilio | Fernanda |

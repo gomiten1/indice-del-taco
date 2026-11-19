@@ -92,9 +92,19 @@ sin ejecutarse. Cada corrida queda en la tabla `registro_ejecuciones` (consultab
 | `ProjectName` | String | `indice-del-taco` | `^[a-z0-9-]{3,30}$` |
 | `Environment` | String | `dev` | `dev` o `prod` |
 
+## Despliegue en un solo comando
+
+Desde la raíz del repo, con la sesión de AWS activa (o `aws configure`) y `BANXICO_TOKEN` en el entorno o en `.env`:
+
+```bash
+./scripts/desplegar.sh --alert-email tu-correo@dominio.com
+```
+
+El script valida identidad y región, carga el token, despliega los 7 stacks en orden idempotente y empaqueta/sube las Lambdas. Flags: `--project`, `--environment`, `--region`, `--dry-run`.
+
 ## Pendiente
 
-- Un **script** que despliegue todo en un solo comando y la prueba destruir → desplegar (roadmap 4.4).
+- Prueba destruir → desplegar completa (roadmap B2); `scripts/desplegar.sh` deja la mitad reproducible.
 - El **Budget** de AWS existe pero se creó a mano; no está en ninguna plantilla.
 - La ingesta de **PROFECO** (carga manual a bronze, [ADR 0011](../docs/adr/0011-ingesta-hibrida-profeco-sniim.md)).
 
