@@ -92,9 +92,35 @@ sin ejecutarse. Cada corrida queda en la tabla `registro_ejecuciones` (consultab
 | `ProjectName` | String | `indice-del-taco` | `^[a-z0-9-]{3,30}$` |
 | `Environment` | String | `dev` | `dev` o `prod` |
 
+## Despliegue en un solo comando
+
+Desde la raíz del repo, con la sesión de AWS activa (o `aws configure`) y `BANXICO_TOKEN` en el entorno o en `.env`:
+
+```bash
+./scripts/desplegar.sh --alert-email tu-correo@dominio.com
+```
+
+El script valida identidad y región, carga el token, despliega los 7 stacks en orden idempotente y empaqueta/sube las Lambdas. Flags: `--project`, `--environment`, `--region`, `--dry-run`.
+
+## Despliegue automático desde GitHub (CD)
+
+El workflow [`.github/workflows/cd.yml`](../.github/workflows/cd.yml) corre el mismo `scripts/desplegar.sh` cada vez que hay push a `main` con cambios en `infra/`, `src/`, el script o el workflow (también se puede disparar manualmente desde la pestaña *Actions* del repo).
+
+OIDC está bloqueado en la cuenta AWS del proyecto, así que el workflow usa Access Key del usuario IAM `indice-taco-dev` (política `AdministratorAccess`), leída desde Secrets del repo:
+
+| Secret | Qué guarda |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | Access Key ID del usuario IAM `indice-taco-dev` |
+| `AWS_SECRET_ACCESS_KEY` | Secret Access Key correspondiente |
+| `AWS_REGION` | `us-east-2` |
+| `ALERT_EMAIL` | Destinatario principal de las alertas SNS (se puede sobrescribir con un input al disparar el workflow a mano) |
+| `BANXICO_TOKEN` | *Opcional*. Si se provee, se refresca el parámetro en SSM en cada despliegue. Si no, el script omite ese paso asumiendo que ya existe de un despliegue previo. |
+
+Para rotar la Access Key: crear una **Clave de acceso 2** desde IAM, actualizar los dos Secrets, verificar un despliegue exitoso y **desactivar** la clave vieja (no borrar inmediatamente, por si hay rollback).
+
 ## Pendiente
 
-- Un **script** que despliegue todo en un solo comando y la prueba destruir → desplegar (roadmap 4.4).
+- Prueba destruir → desplegar completa (roadmap B2); `scripts/desplegar.sh` deja la mitad reproducible.
 - El **Budget** de AWS existe pero se creó a mano; no está en ninguna plantilla.
 - La ingesta de **PROFECO** (carga manual a bronze, [ADR 0011](../docs/adr/0011-ingesta-hibrida-profeco-sniim.md)).
 
